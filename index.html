@@ -4345,10 +4345,16 @@ function showUnsavedDialog(){
 // PIVOTロゴ: トップページ(物件一覧)へ戻る
 function goToTop(){
   closeModal();
-  // 閉じられた(未保存確認でキャンセルされていない)場合のみトップへ
-  if(!document.getElementById('modal').classList.contains('active')){
-    window.scrollTo(0, 0);
+  // 未保存確認でキャンセルされた場合は中断
+  if(document.getElementById('modal') && document.getElementById('modal').classList.contains('active')){ return; }
+  // 契約管理タブを開いている場合は、物件管理タブへ戻す
+  if(document.body.classList.contains('tab-kanban')){
+    if(typeof switchApp === 'function'){ switchApp('pivot'); }
+  } else {
+    // 物件管理タブにいるときは、押すたびに最新を取り込む(未保存ならガードで取り込まない)
+    try{ if(typeof autoPullOnStart === 'function'){ autoPullOnStart(); } }catch(e){}
   }
+  window.scrollTo(0, 0);
 }
 
 // ===== 契約管理→PIVOT 連携: 区画の予約行に「予約中」を書き込む =====
@@ -7302,6 +7308,8 @@ function switchApp(which){
   document.getElementById('tab-pivot').classList.toggle('active', which!=='kanban');
   document.getElementById('tab-kanban').classList.toggle('active', which==='kanban');
   if(which==='kanban' && window.KB && window.KB.renderAll){ try{ window.KB.renderAll(); }catch(e){} }
+  // タブを押すたびにクラウドから最新を取り込む(未保存の変更があるときは取り込まない=autoPullOnStart側でガード)
+  try{ if(typeof autoPullOnStart === 'function'){ autoPullOnStart(); } }catch(e){}
 }
 </script>
 <script>
