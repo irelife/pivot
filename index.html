@@ -1473,6 +1473,38 @@ body.tab-kanban .kb-toolbar { display:flex; }
     100% { transform: translateY(105vh) rotate(720deg); opacity: 0.9; }
   }
 
+  /* ===== 書類プレビュー オーバーレイ ===== */
+  #doc-overlay {
+    position: fixed; inset: 0; z-index: 99999;
+    background: #4a4a4a; display: flex; flex-direction: column;
+  }
+  .doc-ov-bar {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 10px 14px; background: #111; color: #fff;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  }
+  .doc-ov-title { font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .doc-ov-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+  .doc-ov-btn {
+    border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700;
+    cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .doc-ov-print { background: #2563eb; color: #fff; }
+  .doc-ov-close { background: #fff; color: #111; }
+  .doc-ov-btn:active { opacity: .85; }
+  .doc-ov-body { flex: 1 1 auto; overflow: auto; -webkit-overflow-scrolling: touch; padding: 16px; display: flex; justify-content: center; }
+  #doc-ov-frame {
+    width: 100%; max-width: 1100px; height: 100%; min-height: 100%;
+    border: none; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.4);
+  }
+  @media (max-width: 600px) {
+    .doc-ov-bar { flex-wrap: wrap; gap: 8px; }
+    .doc-ov-title { flex: 1 1 100%; font-size: 14px; }
+    .doc-ov-actions { flex: 1 1 100%; }
+    .doc-ov-btn { flex: 1 1 0; padding: 11px 8px; }
+    .doc-ov-body { padding: 8px; }
+  }
+
 </style>
 </head>
 <body>
@@ -3204,12 +3236,6 @@ function generateShoudakuPrint(data){
   }
   const periodFromYMD = splitYMD(data.periodFrom);
   const periodToYMD = splitYMD(data.periodTo);
-  // 別タブで開く
-  const win = window.open('', '_blank');
-  if(!win){
-    alert('ポップアップがブロックされています。\nブラウザのポップアップを許可してください。');
-    return;
-  }
 
   const layoutImgHtml = data.layoutImageUrl
     ? '<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;"><img src="'+data.layoutImageUrl+'" style="max-width:100%;max-height:420px;object-fit:contain;"></div>'
@@ -3370,9 +3396,72 @@ function generateShoudakuPrint(data){
     '<\/scr'+'ipt>' +
 
     '<\/body><\/html>';
-  win.document.write(html);
-  win.document.close();
+  showDocOverlay(html, '📋 保管場所使用承諾書');
 }
+
+// ==============================
+// 書類を「画面内オーバーレイ」で表示する共通関数
+// 新しいタブではなくPIVOT画面の中に重ねて表示する。
+// ・「閉じる」で必ず元の画面に戻れる
+// ・「PDF保存/印刷」ボタンから印刷ダイアログを出す(iPadでも安定)
+// ・書類HTML内の自動印刷スクリプトは取り除く(開いた瞬間に印刷が出ないように)
+// ==============================
+function showDocOverlay(html, title){
+  // 既存のオーバーレイがあれば消す
+  closeDocOverlay();
+  // 書類HTML内の「自動でwindow.print()を呼ぶ」スクリプトを無効化
+  // (オーバーレイでは、ユーザーがボタンを押したときだけ印刷する)
+  let docHtml = html.replace(/window\.print\(\)/g, '/*auto-print-disabled*/');
+
+  const ov = document.createElement('div');
+  ov.id = 'doc-overlay';
+  ov.innerHTML =
+    '<div class="doc-ov-bar">' +
+      '<span class="doc-ov-title">' + (title || '書類') + '</span>' +
+      '<div class="doc-ov-actions">' +
+        '<button type="button" class="doc-ov-btn doc-ov-print" onclick="printDocOverlay()">🖨 PDF保存 / 印刷</button>' +
+        '<button type="button" class="doc-ov-btn doc-ov-close" onclick="closeDocOverlay()">✕ 閉じる</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="doc-ov-body"><iframe id="doc-ov-frame" title="書類プレビュー"></iframe></div>';
+  document.body.appendChild(ov);
+  document.body.style.overflow = 'hidden';
+
+  const frame = document.getElementById('doc-ov-frame');
+  const fdoc = frame.contentWindow.document;
+  // 画面表示用の調整: 横長(landscape)書類でも画面幅に収まるよう、bodyを幅100%・自動縮小気味に。
+  // 印刷時は @page の指定(landscape等)が効くので、元のサイズで出力される。
+  const screenFix =
+    '<style id="__screen_fit__">' +
+    '@media screen{' +
+      'html,body{width:100% !important;max-width:100% !important;box-sizing:border-box;overflow-x:hidden;}' +
+      'img{max-width:100%;height:auto;}' +
+      'table{max-width:100%;}' +
+    '}' +
+    '</style>';
+  let outHtml = docHtml;
+  if(outHtml.indexOf('</head>') >= 0){
+    outHtml = outHtml.replace('</head>', screenFix + '</head>');
+  } else {
+    outHtml = screenFix + outHtml;
+  }
+  fdoc.open();
+  fdoc.write(outHtml);
+  fdoc.close();
+}
+function printDocOverlay(){
+  const frame = document.getElementById('doc-ov-frame');
+  if(frame && frame.contentWindow){
+    try{ frame.contentWindow.focus(); frame.contentWindow.print(); }
+    catch(e){ window.print(); }
+  }
+}
+function closeDocOverlay(){
+  const ov = document.getElementById('doc-overlay');
+  if(ov){ ov.remove(); }
+  document.body.style.overflow = '';
+}
+try{ window.printDocOverlay = printDocOverlay; window.closeDocOverlay = closeDocOverlay; }catch(e){}
 
 // ==============================
 // 駐車場賃貸借契約書(発行モーダル)
@@ -3450,9 +3539,6 @@ function printKeiyaku(){
 }
 
 function generateKeiyakuPrint(data){
-  const win = window.open('', '_blank');
-  if(!win){ alert('ポップアップがブロックされています。\nブラウザのポップアップを許可してください。'); return; }
-
   // 日付フォーマッタ
   const fmtJp = (dateStr) => {
     if(!dateStr) return '　　　年　　月　　日';
@@ -3587,8 +3673,7 @@ function generateKeiyakuPrint(data){
     '});' +
     '<\/scr'+'ipt>' +
     '<\/body><\/html>';
-  win.document.write(html);
-  win.document.close();
+  showDocOverlay(html, '📝 駐車場賃貸借契約書');
 }
 
 // ==============================
@@ -3941,9 +4026,6 @@ function printSeikyu(){
 }
 
 function generateSeikyuPrint(data){
-  const win = window.open('', '_blank');
-  if(!win){ alert('ポップアップがブロックされています。\nブラウザのポップアップを許可してください。'); return; }
-
   const fmtJp = (dateStr) => {
     if(!dateStr) return '';
     const m = String(dateStr).match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
@@ -4129,8 +4211,7 @@ function generateSeikyuPrint(data){
     '});' +
     '<\/scr'+'ipt>' +
     '<\/body><\/html>';
-  win.document.write(html);
-  win.document.close();
+  showDocOverlay(html, '💴 請求書');
 }
 
 function openModal(id){
