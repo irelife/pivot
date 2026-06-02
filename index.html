@@ -3244,7 +3244,7 @@ function generateShoudakuPrint(data){
     'body{font-family:"MS Gothic","Yu Gothic",sans-serif;font-size:11pt;color:#000;line-height:1.5;margin:0;}' +
     '.page-break{page-break-after:always;break-after:page;height:0;display:block;}' +
     '.page{padding:0;}' +
-    '.page-shoudaku{page-break-after:always;break-after:page;}' +
+    '.page-shoudaku{}' +
     '.page-shozai{page-break-inside:avoid;page-break-before:always;break-before:page;}' +
     'h1{font-size:18pt;text-align:center;border:1.5px solid #000;padding:8px;margin:0 0 10px;letter-spacing:6px;}' +
     'h2{font-size:14pt;text-align:center;margin:4px 0 8px;font-weight:700;letter-spacing:4px;}' +
@@ -3343,8 +3343,6 @@ function generateShoudakuPrint(data){
     '<p style="font-size:9pt;margin-top:14px;">注　共有の場合は、必要な共有者全員の住所・氏名を記入してください。</p>' +
     '<p style="font-size:9pt;margin-top:4px;">備考　用紙の大きさは、日本産業規格Ａ４とする。</p>' +
     '</div>' +
-
-    '<div class="page-break"></div>' +
 
     /* 2枚目: 別記様式第2号(A4横向き) */
     '<div class="page page-shozai">' +
