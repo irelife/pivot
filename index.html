@@ -2530,6 +2530,17 @@ function scheduleAutoPush(){
 }
 try{ window.__scheduleAutoPush = scheduleAutoPush; }catch(e){}
 
+// 重要な変更(契約の削除・追加など)で即時にクラウドへ送るための関数。
+// デバウンス(1.2秒待ち)を挟まず、すぐに送信する。
+function pushNow(){
+  if(_autoPushTimer){ clearTimeout(_autoPushTimer); _autoPushTimer = null; }
+  touchLocalMtime();
+  _hasUnsavedChanges = true;
+  setSyncStatus('saving', '⏳ 保存中…');
+  doAutoPush();
+}
+try{ window.__pushNow = pushNow; }catch(e){}
+
 async function doAutoPush(){
   const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
   if(!url) return;
@@ -7373,8 +7384,11 @@ const STORAGE_KEY = 'contract_kanban_v2';
 function loadAll(){ try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e){ return {}; } }
 function saveAll(d){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
-  // 契約データの変更もクラウドへ自動送信(物件側で定義した同期をグローバル経由で呼ぶ)
-  try{ if(typeof window.__scheduleAutoPush === 'function'){ window.__scheduleAutoPush(); } }catch(e){}
+  // 契約データの変更は即座にクラウドへ送信(削除直後にリロードしても間に合うように)
+  try{
+    if(typeof window.__pushNow === 'function'){ window.__pushNow(); }
+    else if(typeof window.__scheduleAutoPush === 'function'){ window.__scheduleAutoPush(); }
+  }catch(e){}
 }
 function genId(){ return 'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function today(){ return new Date().toISOString().slice(0,10); }
