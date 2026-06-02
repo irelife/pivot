@@ -3462,8 +3462,10 @@ function generateKeiyakuPrint(data){
   const html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>駐車場賃貸借契約書</title>' +
     '<style>' +
     '@page{size:A3 landscape;margin:7mm 8mm;}' +
+    'html,body{margin:0;padding:0;}' +
     'body{font-family:"MS Mincho","Yu Mincho",serif;font-size:12.5pt;color:#000;line-height:1.7;margin:0;}' +
-    '.sheet{width:100%;page-break-inside:avoid;break-inside:avoid;}' +
+    '.sheet{width:100%;page-break-inside:avoid;break-inside:avoid;page-break-after:avoid;break-after:avoid;overflow:hidden;}' +
+    '@media print{.sheet{page-break-after:avoid;break-after:avoid;} .sheet *{page-break-inside:avoid;}}' +
     '.title{font-size:26pt;text-align:center;font-weight:700;letter-spacing:14px;margin:2px 0 22px 0;}' +
     '.cols{display:grid;grid-template-columns:1fr 1fr;gap:12mm;}' +
     '.col{}' +
@@ -3486,12 +3488,6 @@ function generateKeiyakuPrint(data){
     '.inkan-mark-kou{right:44px;}' +
     '.sign-name-otsu{display:flex;align-items:center;}' +
     '.tail-text{font-size:12.5pt;margin:6px 0 3px;line-height:1.8;}' +
-    '</style></head><body>' +
-    '</style></head><body>' +
-    '</style></head><body>' +
-    '</style></head><body>' +
-    '</style></head><body>' +
-    '</style></head><body>' +
     '</style></head><body>' +
     '<div class="sheet">' +
       '<h1 class="title">駐車場賃貸借契約書</h1>' +
