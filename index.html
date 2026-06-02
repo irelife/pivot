@@ -21,6 +21,8 @@
   /* ===== 基本リセット ===== */
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
   html,body{height:100%;}
+  /* スマホで横にはみ出さないようにする(横スクロール防止) */
+  html,body{max-width:100%;overflow-x:hidden;}
   /* iPhoneのノッチ・ホームバーを避ける(セーフエリア対応) */
   body{ padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
   body{
@@ -570,6 +572,12 @@
     .form-row{gap:8px;}
     .spots-table{font-size:11px;}
     .spots-table th,.spots-table td{padding:4px 5px;}
+    /* タブバーを画面幅に収める(横はみ出し防止) */
+    .app-tabs{flex-wrap:wrap;gap:8px;padding:10px 12px 0;max-width:100%;}
+    .app-pivot-logo{font-size:22px;margin-right:6px;}
+    .app-tab{font-size:13px;padding:8px 14px;}
+    .kb-toolbar{margin-left:0;width:100%;flex-wrap:wrap;gap:6px;}
+    .kb-toolbar .search-input{width:100%;margin-left:0;order:0;}
   }
 
 /* ===== 統合タブ ===== */
@@ -1398,6 +1406,15 @@ body.tab-kanban .kb-toolbar { display:flex; }
     #kb-view .sheet { max-width: 100%; }
     #kb-view .field-grid, #kb-view .field-grid.col3 { grid-template-columns: 1fr 1fr; }
     #kb-view .field.span2, #kb-view .field.span3 { grid-column: span 2; }
+  }
+  /* スマホ縦画面: 契約カードを1列にして画面幅に収める(文字が縦に潰れるのを防ぐ) */
+  @media (max-width: 600px) {
+    #kb-view .contract-grid { grid-template-columns: 1fr; gap: 12px; padding: 10px 14px 20px; }
+    #kb-view .ct-card { width: 100%; min-width: 0; }
+    #kb-view .ct-card * { min-width: 0; }
+    #kb-view .ct-body { min-width: 0; flex: 1 1 auto; }
+    #kb-view .ct-body .card-title { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
+    #kb-view .ct-body .card-sub { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
   }
   /* ===== 完了お祝い演出(body直下に出すため #kb-view で限定しない) ===== */
   .celebrate-overlay {
