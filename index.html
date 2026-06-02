@@ -1442,7 +1442,6 @@ body.tab-kanban .kb-toolbar { display:flex; }
   .doc-ov-close { background: #fff; color: #111; }
   .doc-ov-btn:active { opacity: .85; }
   .doc-ov-body { flex: 1 1 auto; overflow: auto; -webkit-overflow-scrolling: touch; padding: 16px; display: flex; justify-content: center; }
-  /* 書類コンテンツ(直接差し込み)の画面表示 */
   .doc-ov-content { width: 100%; max-width: 1100px; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.4); padding: 12mm; box-sizing: border-box; }
   .doc-ov-content img { max-width: 100%; height: auto; }
   @media (max-width: 600px) {
@@ -1453,7 +1452,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
     .doc-ov-body { padding: 8px; }
     .doc-ov-content { padding: 6mm; }
   }
-  /* 印刷時: 書類オーバーレイが開いているときは、本体を全て隠し、書類だけを印刷する */
+  /* 印刷時: 書類オーバーレイが開いているときは、本体(物件一覧など)を全て隠し、書類だけを印刷する */
   @media print {
     body.doc-printing > *:not(#doc-overlay) { display: none !important; }
     body.doc-printing #doc-overlay { position: static !important; background: #fff !important; display: block !important; overflow: visible !important; }
@@ -3170,14 +3169,10 @@ function generateShoudakuPrint(data){
   const html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>保管場所使用承諾書</title>' +
     '<style>' +
     '@page{size:A4 landscape;margin:8mm 12mm;}' +
-    'html,body{margin:0;padding:0;}' +
-    'body{font-family:"MS Gothic","Yu Gothic",sans-serif;font-size:11pt;color:#000;line-height:1.5;}' +
-    /* 各ページをA4横1枚に固定収め(幅273mm=297-12*2, 高さ194mm=210-8*2)。改ページを明確化し分割を防ぐ */
-    '.page{box-sizing:border-box;width:100%;max-width:273mm;margin:0 auto;padding:0;page-break-inside:avoid;break-inside:avoid;}' +
-    '@media print{.page{width:273mm;max-width:273mm;min-height:190mm;overflow:hidden;}}' +
-    '.page-shozai{page-break-before:always;break-before:page;}' +
-    '.page-break{page-break-after:always;break-after:page;}' +
-    '@media screen{.page{border-bottom:1px dashed #ccc;margin-bottom:10px;}}' +
+    'body{font-family:"MS Gothic","Yu Gothic",sans-serif;font-size:11pt;color:#000;line-height:1.5;margin:0;}' +
+    '.page-break{page-break-after:always;}' +
+    '.page{padding:0;}' +
+    '.page-shozai{page-break-inside:avoid;page-break-before:always;}' +
     'h1{font-size:18pt;text-align:center;border:1.5px solid #000;padding:8px;margin:0 0 10px;letter-spacing:6px;}' +
     'h2{font-size:14pt;text-align:center;margin:4px 0 8px;font-weight:700;letter-spacing:4px;}' +
     '.section-title{font-size:11pt;text-align:right;margin-bottom:4px;}' +
@@ -3200,7 +3195,7 @@ function generateShoudakuPrint(data){
     /* 別記様式第2号(所在図ページ) */
     '.youshiki-table{width:100%;border-collapse:collapse;margin-top:6px;}' +
     '.youshiki-table th{border:2px solid #000;padding:5px;background:#f5f5f5;font-size:11pt;text-align:center;}' +
-    '.youshiki-table td{border:2px solid #000;height:300px;vertical-align:middle;padding:6px;text-align:center;}' +
+    '.youshiki-table td{border:2px solid #000;height:320px;vertical-align:middle;padding:6px;text-align:center;}' +
     '.shutter-label{font-size:9.5pt;margin-top:6px;}' +
     '.notes{font-size:8pt;line-height:1.4;margin-top:6px;}' +
     '</style></head><body>' +
@@ -3276,6 +3271,8 @@ function generateShoudakuPrint(data){
     '<p style="font-size:9pt;margin-top:4px;">備考　用紙の大きさは、日本産業規格Ａ４とする。</p>' +
     '</div>' +
 
+    '<div class="page-break"></div>' +
+
     /* 2枚目: 別記様式第2号(A4横向き) */
     '<div class="page page-shozai">' +
     '<div style="text-align:right;font-size:9pt;margin-bottom:4px;">別記様式第2号</div>' +
@@ -3323,26 +3320,17 @@ function generateShoudakuPrint(data){
 }
 
 // ==============================
-// 書類を「画面内オーバーレイ」で表示する共通関数
-// 新しいタブではなくPIVOT画面の中に重ねて表示する。
-// ・「閉じる」で必ず元の画面に戻れる
-// ・「PDF保存/印刷」ボタンから印刷ダイアログを出す
-// ・書類HTML内の自動印刷スクリプトは取り除く
+// 書類を画面内オーバーレイで表示(印刷時は書類だけを残し、後ろの本体は隠す)
 // ==============================
 function showDocOverlay(html, title){
   closeDocOverlay();
-  // 書類HTMLから <style>...</style> と <body>...</body> の中身を取り出して、親ページに直接差し込む。
-  // (iframeだと印刷時に親ページごと印刷されてしまうため、直接埋め込み方式にする)
   let styleHtml = '';
   const styleMatches = html.match(/<style[^>]*>[\s\S]*?<\/style>/gi);
   if(styleMatches){ styleHtml = styleMatches.join('\n'); }
   let bodyHtml = '';
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
   if(bodyMatch){ bodyHtml = bodyMatch[1]; } else { bodyHtml = html; }
-  // 自動印刷スクリプトは取り除く
   bodyHtml = bodyHtml.replace(/<script[\s\S]*?<\/script>/gi, '');
-  // 書類内の @page 指定は親ページの印刷に影響するので、ここでは活かす(各書類のA4/A3指定)
-
   const ov = document.createElement('div');
   ov.id = 'doc-overlay';
   ov.innerHTML =
@@ -3358,12 +3346,10 @@ function showDocOverlay(html, title){
   document.body.style.overflow = 'hidden';
 }
 function printDocOverlay(){
-  // 印刷時は body に doc-printing クラスを付けて、書類だけを印刷する(CSSで他を隠す)
   document.body.classList.add('doc-printing');
   const cleanup = function(){ document.body.classList.remove('doc-printing'); window.removeEventListener('afterprint', cleanup); };
   window.addEventListener('afterprint', cleanup);
   setTimeout(function(){ try{ window.print(); }catch(e){} }, 100);
-  // afterprintが来ない端末向けの保険
   setTimeout(cleanup, 60000);
 }
 function closeDocOverlay(){
@@ -3585,6 +3571,7 @@ function generateKeiyakuPrint(data){
     '<\/scr'+'ipt>' +
     '<\/body><\/html>';
   showDocOverlay(html, '📝 駐車場賃貸借契約書');
+
 }
 
 // ==============================
@@ -4019,8 +4006,8 @@ function generateSeikyuPrint(data){
     /* 印刷時も全ての背景色・文字色を維持 */
     '@media print{*{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}html,body{height:auto;}}' +
     /* sheet全体を縦flexに: 上から請求書本体、最下段に下ボックスを押し出す */
-    '.sheet{width:100%;min-height:273mm;display:flex;flex-direction:column;page-break-inside:avoid;color:#000;box-sizing:border-box;}' +
-    '@media print{.sheet{min-height:calc(297mm - 20mm);page-break-after:avoid;}}' +
+    '.sheet{width:100%;min-height:auto;display:flex;flex-direction:column;page-break-inside:avoid;color:#000;box-sizing:border-box;}' +
+    '@media print{.sheet{min-height:auto;page-break-after:avoid;page-break-inside:avoid;}}' +
     '.sheet-main{flex:0 0 auto;}' +
     '.sheet-bottom{margin-top:auto;padding-top:10mm;}' +
     '.title{font-size:26pt;text-align:center;font-weight:700;letter-spacing:18px;margin:0 0 10px 0;border-bottom:3px double #000;padding-bottom:6px;color:#000 !important;}' +
@@ -4123,6 +4110,7 @@ function generateSeikyuPrint(data){
     '<\/scr'+'ipt>' +
     '<\/body><\/html>';
   showDocOverlay(html, '💴 請求書');
+
 }
 
 function openModal(id){
