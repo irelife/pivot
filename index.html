@@ -2661,6 +2661,42 @@ async function loginPull(){
   setTimeout(() => { const e=document.getElementById('sync-status'); if(e && e.dataset.state==='saved') setSyncStatus('idle',''); }, 2500);
 }
 
+// タブ・ロゴから呼ぶ「最新を取り込む」関数。
+// 時刻判定をせず、必ずクラウドの内容で画面を更新する(クラウドが更新時刻を返さない環境でも確実に反映)。
+// ただし未保存の変更があるときは、上書きで消えないよう確認してから取り込む。
+async function forcePullLatest(){
+  const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
+  if(!url) return;
+  // 未保存の変更があれば確認(誤って消さないため)
+  if(_hasUnsavedChanges){
+    const ok = confirm('保存していない変更があるかもしれません。\n最新を取り込むと、未保存の変更が消える場合があります。\n\n最新を取り込みますか？');
+    if(!ok){ return; }
+  }
+  setSyncStatus('loading', '☁️ 確認中…');
+  try{
+    const r = await postToGas(url, { action:'load' });
+    if(r && r.ok){
+      const payload = r.payload || {};
+      const buildings = payload.buildings || {};
+      const contracts = payload.contracts || {};
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(buildings));
+      localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts || {}));
+      const cloudMtime = parseInt(payload.mtime || '0', 10) || Date.now();
+      try{ localStorage.setItem(MTIME_KEY, String(cloudMtime)); }catch(e){}
+      _hasUnsavedChanges = false;
+      if(typeof renderAll === 'function') renderAll();
+      if(typeof window.KB !== 'undefined' && typeof window.KB.renderAll === 'function'){ try{ window.KB.renderAll(); }catch(e){} }
+      setSyncStatus('saved', '✅ 最新です');
+      setTimeout(() => { const e=document.getElementById('sync-status'); if(e && e.dataset.state==='saved') setSyncStatus('idle',''); }, 2000);
+    } else {
+      setSyncStatus('error', '⚠️ 取得失敗');
+    }
+  }catch(e){
+    setSyncStatus('error', '⚠️ 取得失敗(通信)');
+  }
+}
+try{ window.forcePullLatest = forcePullLatest; }catch(e){}
+
 function genId(){
   return 'bld_' + Date.now() + '_' + Math.floor(Math.random()*1000);
 }
@@ -4364,9 +4400,12 @@ function showUnsavedDialog(){
 function goToTop(){
   closeModal();
   if(document.getElementById('modal') && document.getElementById('modal').classList.contains('active')){ return; }
-  // 契約管理タブを開いている場合は、物件管理タブへ戻す
+  // 契約管理タブを開いている場合は、物件管理タブへ戻す(switchApp側で最新取得が走る)
   if(document.body.classList.contains('tab-kanban')){
     if(typeof switchApp === 'function'){ switchApp('pivot'); }
+  } else {
+    // 物件管理タブにいるときは、ここで最新を取り込む(未保存時のみ確認)
+    try{ if(typeof window.forcePullLatest === 'function'){ window.forcePullLatest(); } }catch(e){}
   }
   window.scrollTo(0, 0);
 }
@@ -7322,6 +7361,8 @@ function switchApp(which){
   document.getElementById('tab-pivot').classList.toggle('active', which!=='kanban');
   document.getElementById('tab-kanban').classList.toggle('active', which==='kanban');
   if(which==='kanban' && window.KB && window.KB.renderAll){ try{ window.KB.renderAll(); }catch(e){} }
+  // タブを押すたびにクラウドから最新を取り込む(未保存時のみ確認)
+  try{ if(typeof window.forcePullLatest === 'function'){ window.forcePullLatest(); } }catch(e){}
 }
 </script>
 <script>
