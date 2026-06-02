@@ -1474,8 +1474,12 @@ body.tab-kanban .kb-toolbar { display:flex; }
     body.doc-printing > *:not(#doc-overlay) { display: none !important; }
     body.doc-printing #doc-overlay { position: static !important; background: #fff !important; display: block !important; overflow: visible !important; }
     body.doc-printing #doc-overlay .doc-ov-bar { display: none !important; }
-    body.doc-printing #doc-overlay .doc-ov-body { display: block !important; padding: 0 !important; overflow: visible !important; }
-    body.doc-printing #doc-overlay .doc-ov-content { box-shadow: none !important; max-width: none !important; width: 100% !important; padding: 0 !important; }
+    body.doc-printing #doc-overlay .doc-ov-body { display: block !important; padding: 0 !important; overflow: visible !important; justify-content: flex-start !important; }
+    body.doc-printing #doc-overlay .doc-ov-content { box-shadow: none !important; max-width: none !important; width: 100% !important; padding: 0 !important; overflow: visible !important; height: auto !important; }
+    /* 承諾書など複数ページ書類の改ページを確実に効かせる */
+    body.doc-printing #doc-overlay .page-break { page-break-after: always !important; break-after: page !important; display: block !important; height: 0 !important; }
+    body.doc-printing #doc-overlay .page-shozai { page-break-before: always !important; break-before: page !important; }
+    body.doc-printing #doc-overlay .page { overflow: visible !important; }
   }
 
 </style>
