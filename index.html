@@ -785,6 +785,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: 16px; padding: 10px 4px 20px;
+    width: 100%; flex: 1 1 100%;
   }
   #kb-view .empty-grid { padding: 60px 20px; text-align: center; color: #9aa0a6; font-size: 14px; }
   #kb-view .autosave-note { margin-left: auto; margin-right: 12px; font-size: 12px; color: #34c759; font-weight: 700; }
@@ -1408,7 +1409,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
   }
   /* スマホ縦画面: 入る分だけ並べ、入らなければ下段へ。カードがはみ出さないよう文字を折り返す */
   @media (max-width: 600px) {
-    #kb-view .contract-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; padding: 10px 14px 20px; }
+    #kb-view .contract-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; padding: 10px 14px 20px; width: 100%; flex: 1 1 100%; }
     #kb-view .ct-card { width: 100%; min-width: 0; }
     #kb-view .ct-card * { min-width: 0; }
     #kb-view .ct-body { min-width: 0; flex: 1 1 auto; }
