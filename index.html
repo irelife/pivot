@@ -3661,7 +3661,14 @@ function calcNissariUnitPrice(){
   const day = start.getDate();
   const billDays = daysInMonth - day + 1;
   // 日割り単価(税抜) = 月額税抜 × (billDays / daysInMonth)
-  const monthlyNoTax = _seikyuContext.monthlyNoTax || 0;
+  // 月額は、まず物件に登録された月額(monthlyNoTax)を使う。
+  // 0円の場合は、請求項目の「駐車場使用料」行に入力された単価を月額とみなす。
+  let monthlyNoTax = _seikyuContext.monthlyNoTax || 0;
+  if(monthlyNoTax <= 0){
+    // 日割り行・手数料行ではない最初の項目(=駐車場使用料)の単価を使う
+    const base = _seikyuItems.find(it => it._kind !== 'nissari' && it._kind !== 'chukai' && it._kind !== 'meigi' && it._kind !== 'shoudaku' && (Number(it.unitPrice) > 0));
+    if(base){ monthlyNoTax = Number(base.unitPrice) || 0; }
+  }
   if(monthlyNoTax <= 0) return null;
   const nissariNoTax = Math.round(monthlyNoTax * billDays / daysInMonth);
   return {
@@ -3696,7 +3703,7 @@ function onSeikyuStartDateChange(){
 function addTplNissari(){
   const calc = calcNissariUnitPrice();
   if(!calc){
-    alert('契約開始日を入力してください。\nまた、区画の月額が0円の場合は計算できません。');
+    alert('区画の月額が0円のため計算できません。\n単価欄に月額を入力してから、もう一度お試しください。');
     return;
   }
   // 既存の日割り行があれば置き換える
@@ -3816,7 +3823,7 @@ function addTplShoudaku(){
 function addTplShokai(){
   const calc = calcNissariUnitPrice();
   if(!calc){
-    alert('契約開始日を入力してください。\nまた、区画の月額が0円の場合は計算できません。');
+    alert('区画の月額が0円のため計算できません。\n単価欄に月額を入力してから、もう一度お試しください。');
     return;
   }
   // 既存の駐車場使用料行(_kindなし、初期セット行)は削除
