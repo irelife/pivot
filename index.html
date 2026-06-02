@@ -3389,7 +3389,20 @@ function generateShoudakuPrint(data){
     '<\/scr'+'ipt>' +
 
     '<\/body><\/html>';
-  showDocOverlay(html, '📋 保管場所使用承諾書');
+  // 承諾書は新しいタブで開いて印刷する(A4横2枚の改ページを確実にするため)
+  try{
+    const w = window.open('', '_blank');
+    if(w && w.document){
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+    } else {
+      // ポップアップがブロックされた場合はオーバーレイ表示にフォールバック
+      showDocOverlay(html, '📋 保管場所使用承諾書');
+    }
+  }catch(e){
+    showDocOverlay(html, '📋 保管場所使用承諾書');
+  }
 }
 
 // ==============================
