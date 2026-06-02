@@ -2678,10 +2678,14 @@ async function loginPull(){
 async function forcePullLatest(){
   const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
   if(!url) return;
-  // 未保存の変更があれば確認(誤って消さないため)
-  if(_hasUnsavedChanges){
-    const ok = confirm('保存していない変更があるかもしれません。\n最新を取り込むと、未保存の変更が消える場合があります。\n\n最新を取り込みますか？');
-    if(!ok){ return; }
+  // 未保存の変更があれば、確認を出さずに、まず保存(送信)を済ませてから最新を取り込む。
+  // (自動保存される仕組みなので、いちいち確認は出さない)
+  if(_hasUnsavedChanges || _autoPushInFlight){
+    try{ if(typeof pushNow === 'function'){ pushNow(); } }catch(e){}
+    // 送信完了を少し待つ(最大3秒)
+    for(let i=0; i<15 && (_hasUnsavedChanges || _autoPushInFlight); i++){
+      await new Promise(r=>setTimeout(r, 200));
+    }
   }
   setSyncStatus('loading', '☁️ 確認中…');
   try{
