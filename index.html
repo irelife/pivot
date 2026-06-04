@@ -4885,6 +4885,16 @@ function linkReservationToSpot(info){
   } else {
     if(!confirm(msg)){ return { ok:false, reason:'cancelled' }; }
   }
+  // ★ 別の予約者を上書きする場合は、読み飛ばし防止のため複数回 念押し確認する
+  if(overwriteWarn){
+    const others = otherResList.join('\n');
+    if(!confirm('【重要・再確認①】\n選んだ区画には、すでに別の予約が入っています:\n' + others + '\n\nこのまま進めると、上記の予約は完全に削除され、元に戻せません。\n本当に上書きしますか?')){
+      return { ok:false, reason:'cancelled' };
+    }
+    if(!confirm('【重要・再確認②】\n念のためもう一度確認します。\n区画番号の入力ミスではありませんか?\n上書きしてよければ「OK」を押してください。')){
+      return { ok:false, reason:'cancelled' };
+    }
+  }
   // 予約行にだけ書き込み(メイン行は触らない)
   // info.room(例「東105」「A101」)を、棟(先頭の漢字1文字またはアルファベット1文字)と
   // 号室(残りの数字部分)に分けて、それぞれ res_tou / res_room に振り分ける。
@@ -8446,6 +8456,25 @@ function moveToDone(event, id){  event.stopPropagation();
   toast('「' + (c.property||'契約') + '」を完了タブへ移動しました');
 }
 // キャンセル・審査落ちカードを「申込」に戻す(復活)
+// 駐車場予約を復活するか確認して、OKなら復活する(申込に戻す・通常状態に戻す両方で使用)
+function maybeRestoreReservation(c){
+  try{
+    if(c && c.property && c.parking && c.contractDate && typeof window.PV_linkReservation === 'function'){
+      if(confirm('紐づいていた駐車場予約も復活させますか?')){
+        const resName = (c.type === '法人' && c.carContractor && c.carContractor.trim())
+          ? c.carContractor.trim() : c.contractor;
+        const r = window.PV_linkReservation({
+          property: c.property, parking: c.parking, room: c.room,
+          contractor: resName, contractDate: c.contractDate, srcKey: c.id,
+          silent: true
+        });
+        if(r && r.ok){ toast('駐車場予約を復活しました'); }
+        else if(r && r.reason === 'already'){ toast('駐車場予約はすでに登録済みです'); }
+        else if(r && r.msg){ toast(r.msg); }
+      }
+    }
+  }catch(e){}
+}
 function revertToApply(event, id){
   if(event) event.stopPropagation();
   const all = loadAll();
@@ -8455,23 +8484,7 @@ function revertToApply(event, id){
   saveAll(all);
   renderAll();
   toast('「' + (c.property||'契約') + '」を申込に戻しました');
-  // 駐車場予約を復活するか確認(物件・区画・契約日が揃っているときのみ)
-  try{
-    if(c.property && c.parking && c.contractDate && typeof window.PV_linkReservation === 'function'){
-      if(confirm('紐づいていた駐車場予約も復活させますか?')){
-        const resName = (c.type === '法人' && c.carContractor && c.carContractor.trim())
-          ? c.carContractor.trim() : c.contractor;
-        const r = window.PV_linkReservation({
-          property: c.property, parking: c.parking, room: c.room,
-          contractor: resName, contractDate: c.contractDate, srcKey: c.id,
-          silent: true   // 確認はこちらで済ませたので内部確認は出さない
-        });
-        if(r && r.ok){ toast('駐車場予約を復活しました'); }
-        else if(r && r.reason === 'already'){ toast('駐車場予約はすでに登録済みです'); }
-        else if(r && r.msg){ toast(r.msg); }
-      }
-    }
-  }catch(e){}
+  maybeRestoreReservation(c);
 }
 // カード状況プルダウンの変更
 function onCardStatusChange(event, id){
@@ -8501,9 +8514,11 @@ function onCardStatusChange(event, id){
     }catch(e){}
   } else {
     // 申込〜契約書類作成完了 などの段階を保存
+    const wasCancel = (c.dealStatus === 'cancel' || c.dealStatus === 'rejected');
     c.dealStatus = val;
     saveAll(all);
     renderAll();
+    if(wasCancel){ maybeRestoreReservation(c); }
   }
 }
 function iconForStep(key){
