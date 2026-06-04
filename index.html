@@ -4911,6 +4911,55 @@ function linkReservationToSpot(info){
 // 契約管理(別IIFE)から呼べるよう公開
 window.PV_linkReservation = linkReservationToSpot;
 
+// ===== 契約削除・キャンセル時: その契約の駐車場予約を解除 =====
+// info = { contractor, srcKey, property?, parking? }
+// ・対象は「res_srcKey が一致」または「予約者名が一致」する予約行。
+// ・他人の予約(予約者名が違う)は残す。メイン行(現使用者)には触れない。
+function unlinkReservationFromSpots(info){
+  info = info || {};
+  const srcKey = info.srcKey || '';
+  const contractor = String(info.contractor || '').trim();
+  const carName = String(info.carContractor || '').trim();
+  if(!srcKey && !contractor && !carName) return { ok:false, removed:0 };
+  const all = loadAll();
+  let removed = 0;
+  const norm = s => String(s||'').replace(/\s+/g,'').trim();
+  const wantProp = norm(info.property || '');
+  Object.values(all).forEach(b => {
+    if(!b || !Array.isArray(b.spots)) return;
+    if(wantProp){
+      const nb = norm(b.name);
+      if(!(nb === wantProp || nb.includes(wantProp) || wantProp.includes(nb))) return;
+    }
+    b.spots.forEach(s => {
+      if(!s) return;
+      const hasRes = !!(s.res_user || s.res_date || s.res_srcKey);
+      if(!hasRes) return;
+      const bySrc  = !!(srcKey && s.res_srcKey && s.res_srcKey === srcKey);
+      const byName = !!(s.res_user && ((contractor && s.res_user === contractor) || (carName && s.res_user === carName)));
+      if(bySrc || byName){
+        delete s.res_user; delete s.res_date; delete s.res_srcKey;
+        delete s.res_tou; delete s.res_room; delete s.res_price; delete s.res_note;
+        removed++;
+      }
+    });
+  });
+  if(removed > 0){
+    saveAll(all);
+    try{ if(typeof window.__pushNow === 'function'){ window.__pushNow(); } }catch(e){}
+    if(typeof renderList === 'function'){ try{ renderList(); }catch(e){} }
+    try{
+      if(typeof currentEditId !== 'undefined' && currentEditId && typeof openModal === 'function'){
+        const m = document.getElementById('modal');
+        const isOpen = m && (m.style.display === 'flex' || m.style.display === 'block' || (m.offsetParent !== null));
+        if(isOpen){ openModal(currentEditId); }
+      }
+    }catch(e){}
+  }
+  return { ok:true, removed: removed };
+}
+window.PV_unlinkReservation = unlinkReservationFromSpots;
+
 
 
 
@@ -8339,6 +8388,16 @@ function onCardStatusChange(event, id){
     c.dealStatus = 'cancel';
     saveAll(all);
     renderAll();
+    // 紐づいている駐車場予約も削除するか確認
+    try{
+      if(typeof window.PV_unlinkReservation === 'function'){
+        if(confirm('「' + (c.property||'契約') + '」をキャンセル・審査落ちにしました。\n紐づいている駐車場予約も削除しますか?')){
+          const r = window.PV_unlinkReservation({ contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking });
+          if(r && r.removed > 0){ toast('駐車場予約も削除しました'); }
+          else { toast('紐づく駐車場予約は見つかりませんでした'); }
+        }
+      }
+    }catch(e){}
   } else {
     // 申込〜契約書類作成完了 などの段階を保存
     c.dealStatus = val;
@@ -9511,6 +9570,12 @@ function deleteCardContract(event, id){
   const c = all[id];
   const label = c ? ((c.property||'') + (c.contractor ? '(' + c.contractor + ')' : '')) : '';
   if(!confirm('この契約を削除しますか?\n' + label)) return;
+  // 紐づいた駐車場予約も自動で解除(この契約の予約だけ。他人の予約は残す)
+  try{
+    if(c && typeof window.PV_unlinkReservation === 'function'){
+      window.PV_unlinkReservation({ contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking });
+    }
+  }catch(e){}
   delete all[id];
   saveAll(all);
   toast('削除しました');
