@@ -4869,7 +4869,7 @@ function linkReservationToSpot(info){
     '現在の状況:\n' + curStates + '\n\n' +
     'これらの区画の予約欄に上記を「予約中」として書き込みます。\n' +
     '(現在の使用者・状況は変更しません)' + existingRes + missingNote + '\n\nよろしいですか?';
-  if(!confirm(msg)){ return { ok:false, reason:'cancelled' }; }
+  if(!info.silent && !confirm(msg)){ return { ok:false, reason:'cancelled' }; }
   // 予約行にだけ書き込み(メイン行は触らない)
   // info.room(例「東105」「A101」)を、棟(先頭の漢字1文字またはアルファベット1文字)と
   // 号室(残りの数字部分)に分けて、それぞれ res_tou / res_room に振り分ける。
@@ -4962,6 +4962,30 @@ function unlinkReservationFromSpots(info){
   return { ok:true, removed: removed };
 }
 window.PV_unlinkReservation = unlinkReservationFromSpots;
+
+// この契約に紐づく駐車場予約が存在するか(確認ダイアログを無駄に出さないため)
+function hasLinkedReservation(info){
+  info = info || {};
+  const srcKey = info.srcKey || '';
+  const contractor = String(info.contractor || '').trim();
+  const carName = String(info.carContractor || '').trim();
+  if(!srcKey && !contractor && !carName) return false;
+  const all = loadAll();
+  let found = false;
+  Object.values(all).forEach(b => {
+    if(found || !b || !Array.isArray(b.spots)) return;
+    b.spots.forEach(s => {
+      if(found || !s) return;
+      const hasRes = !!(s.res_user || s.res_date || s.res_srcKey);
+      if(!hasRes) return;
+      const bySrc  = !!(srcKey && s.res_srcKey && s.res_srcKey === srcKey);
+      const byName = !!(s.res_user && ((contractor && s.res_user === contractor) || (carName && s.res_user === carName)));
+      if(bySrc || byName) found = true;
+    });
+  });
+  return found;
+}
+window.PV_hasReservation = hasLinkedReservation;
 
 
 
@@ -8394,6 +8418,23 @@ function revertToApply(event, id){
   saveAll(all);
   renderAll();
   toast('「' + (c.property||'契約') + '」を申込に戻しました');
+  // 駐車場予約を復活するか確認(物件・区画・契約日が揃っているときのみ)
+  try{
+    if(c.property && c.parking && c.contractDate && typeof window.PV_linkReservation === 'function'){
+      if(confirm('紐づいていた駐車場予約も復活させますか?')){
+        const resName = (c.type === '法人' && c.carContractor && c.carContractor.trim())
+          ? c.carContractor.trim() : c.contractor;
+        const r = window.PV_linkReservation({
+          property: c.property, parking: c.parking, room: c.room,
+          contractor: resName, contractDate: c.contractDate, srcKey: c.id,
+          silent: true   // 確認はこちらで済ませたので内部確認は出さない
+        });
+        if(r && r.ok){ toast('駐車場予約を復活しました'); }
+        else if(r && r.reason === 'already'){ toast('駐車場予約はすでに登録済みです'); }
+        else if(r && r.msg){ toast(r.msg); }
+      }
+    }
+  }catch(e){}
 }
 // カード状況プルダウンの変更
 function onCardStatusChange(event, id){
@@ -8409,13 +8450,15 @@ function onCardStatusChange(event, id){
     c.dealStatus = val;
     saveAll(all);
     renderAll();
-    // 紐づいている駐車場予約も削除するか確認
+    // 紐づいている駐車場予約があるときだけ「削除しますか?」を確認(無ければ聞かない)
     try{
-      if(typeof window.PV_unlinkReservation === 'function'){
+      const info = { contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking };
+      if(typeof window.PV_unlinkReservation === 'function'
+         && typeof window.PV_hasReservation === 'function'
+         && window.PV_hasReservation(info)){
         if(confirm('「' + (c.property||'契約') + '」を' + lbl + 'にしました。\n紐づいている駐車場予約も削除しますか?')){
-          const r = window.PV_unlinkReservation({ contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking });
+          const r = window.PV_unlinkReservation(info);
           if(r && r.removed > 0){ toast('駐車場予約も削除しました'); }
-          else { toast('紐づく駐車場予約は見つかりませんでした'); }
         }
       }
     }catch(e){}
