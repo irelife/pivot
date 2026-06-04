@@ -4814,7 +4814,10 @@ function linkReservationToSpot(info){
   };
   targets.forEach(t => {
     t.res_user = info.contractor;
-    t.res_date = info.contractDate;
+    // 予約日は input[type=date] が確実に表示できる YYYY-MM-DD 形式に正規化して書き込む。
+    // (契約日が "2026/06/25" 等の形式でも、ここで "2026-06-25" に揃える)
+    const normDate = (typeof normalizeDate === 'function') ? normalizeDate(info.contractDate) : info.contractDate;
+    t.res_date = normDate || info.contractDate;
     if(info.srcKey) t.res_srcKey = info.srcKey;
     if(info.room){
       const sp = splitTouRoom(info.room);
@@ -5250,7 +5253,7 @@ function renderSpotRowGroup(s, i){
     // 2段目: 予約日(解約日と同じシンプルな構造)
     '<tr class="st-予 sub-row" data-sub-of="'+i+'" data-sub-type="reservation-date">' +
       '<td colspan="2" style="text-align:right;font-size:11px;color:#1e40af;padding-right:10px;">└ 予約日:</td>' +
-      '<td colspan="6"><input type="date" data-field="res_date" value="'+escapeHtml(s.res_date||'')+'" title="予約開始日" style="width:auto;"></td>' +
+      '<td colspan="6"><input type="date" data-field="res_date" value="'+escapeHtml((typeof normalizeDate==='function'?normalizeDate(s.res_date):s.res_date)||'')+'" title="予約開始日" style="width:auto;"></td>' +
       '<td></td>' +
     '</tr>';
   } else if(showAddResBtn){
