@@ -840,23 +840,26 @@ body.tab-kanban .kb-toolbar { display:flex; }
     animation: none;       /* ホバー中は揺れを止めて操作しやすく */
     transform: translateY(-3px);
   }
-  /* 完了タブへ移動ボタン(完了/キャンセルカードに常時表示) */
-  #kb-view .ct-move-done {
-    position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
-    background: #f5b400; color: #3a2c00; border: none; border-radius: 999px;
-    padding: 7px 16px; font-size: 12px; font-weight: 800; cursor: pointer;
-    opacity: 1; pointer-events: auto; transition: opacity 0.15s; white-space: nowrap;
-    box-shadow: 0 4px 12px rgba(245,180,0,0.45); z-index: 5;
+  /* カード下部のアクション行(申込に戻す / 完了タブへ移動) */
+  #kb-view .ct-actions {
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+    margin-top: 10px;
   }
-  #kb-view .ct-card.done:hover .ct-move-done { opacity: 1; pointer-events: auto; }
+  #kb-view .ct-move-done {
+    background: #f5b400; color: #3a2c00; border: none; border-radius: 999px;
+    padding: 8px 16px; font-size: 12px; font-weight: 800; cursor: pointer;
+    white-space: nowrap; box-shadow: 0 3px 10px rgba(245,180,0,0.4); z-index: 5;
+  }
   #kb-view .ct-move-done:hover { background: #d99e00; }
   /* グレー(キャンセル・審査落ち)カード用の移動ボタン */
-  #kb-view .ct-move-done-gray { background: #6b7280; color: #fff; box-shadow: 0 4px 12px rgba(107,114,128,0.45); }
+  #kb-view .ct-move-done-gray { background: #6b7280; color: #fff; box-shadow: 0 3px 10px rgba(107,114,128,0.4); }
   #kb-view .ct-move-done-gray:hover { background: #565d66; }
-  #kb-view .ct-card.status-cancel:hover .ct-move-done { opacity: 1; pointer-events: auto; }
-  /* 移動ボタンの余白を確保 */
-  #kb-view .ct-card.status-cancel { padding-bottom: 40px; }
-  #kb-view .ct-card.done { padding-bottom: 40px; }
+  /* 申込に戻す(復活)ボタン */
+  #kb-view .ct-revert {
+    background: #fff; color: #5b6b7b; border: 1.5px solid #b9bfc7; border-radius: 999px;
+    padding: 8px 16px; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap;
+  }
+  #kb-view .ct-revert:hover { background: #eef0f3; color: #1c1c1e; }
   /* カード状況プルダウン(ヘッダー行・右寄せ) */
   #kb-view .ct-status-select {
     position: relative; z-index: 6; max-width: 100%;
@@ -8146,7 +8149,7 @@ function isContractComplete(c){
 // カードの状態色: complete(青) / defect(赤・基本情報未完了) / almost(緑 17〜19) / progress(紫 16以下)
 function cardStatus(c){
   // 手動でキャンセル・審査落ちに設定されている場合は最優先(グレー)
-  if(c && c.dealStatus === 'cancel') return 'cancel';
+  if(isCancelStatus(c)) return 'cancel';
   if(isContractComplete(c)) return 'complete';
   if(!basicInfoComplete(c)) return 'defect';
   const done = contractProgress(c).done;
@@ -8163,7 +8166,8 @@ const DEAL_STATUSES = [
   { key:'condition',  label:'条件確認中',       text:'#0a6e8e', bg:'#d4f0fb', tone:'progress' },
   { key:'doc_making', label:'契約書類作成中',   text:'#3b39b5', bg:'#e4e3fb', tone:'progress' },
   { key:'doc_done',   label:'契約書類作成完了', text:'#7a2fa6', bg:'#f0e1fa', tone:'progress' },
-  { key:'cancel',     label:'キャンセル・審査落ち', text:'#5b626b', bg:'#e4e6ea', tone:'cancel' },
+  { key:'cancel',     label:'キャンセル',       text:'#5b626b', bg:'#e4e6ea', tone:'cancel' },
+  { key:'rejected',   label:'審査落ち',         text:'#7a3a3a', bg:'#ecdede', tone:'cancel' },
 ];
 // 手動選択肢(プルダウンに出す順)
 const DEAL_MENU = DEAL_STATUSES;
@@ -8174,13 +8178,14 @@ function autoHinagata(c){
   return it ? itemGot(c, it) : false;
 }
 function dealStatusDef(key){ return DEAL_STATUSES.find(s => s.key === key) || null; }
+// キャンセル・審査落ち(グレー扱い)かどうか
+function isCancelStatus(c){ return !!(c && (c.dealStatus === 'cancel' || c.dealStatus === 'rejected')); }
 // プルダウン/カードに表示すべき状況キーを決定
 function dropdownStatus(c){
-  if(c && c.dealStatus === 'cancel') return 'cancel';
+  if(isCancelStatus(c)) return c.dealStatus;   // 'cancel' or 'rejected'
   if(isContractComplete(c)) return 'complete';
   if(autoHinagata(c)) return 'hinagata';
   if(c && c.dealStatus){
-    // 完了相当の手動値は完了扱いにしない(進行中の段階値のみ尊重)
     if(dealStatusDef(c.dealStatus)) return c.dealStatus;
   }
   return 'apply';
@@ -8268,6 +8273,10 @@ function renderCard(c){
   const moveBtn = ((isDone || isCancel) && !c.archived)
     ? '<button class="ct-move-done' + (isCancel ? ' ct-move-done-gray' : '') + '" onclick="KB.moveToDone(event,\'' + c.id + '\')">完了タブへ移動 ▸</button>'
     : '';
+  // キャンセル・審査落ちカードには「申込に戻す」ボタン(復活用)
+  const revertBtn = (isCancel && !c.archived)
+    ? '<button class="ct-revert" onclick="KB.revertToApply(event,\'' + c.id + '\')">↩ 申込に戻す</button>'
+    : '';
 
   // 状況プルダウン(7段階) + 自動表示(完了/ひな形送付済み)
   const ddStatus = dropdownStatus(c);
@@ -8320,7 +8329,7 @@ function renderCard(c){
         (c.memo ? '<div class="ct-memo">📝 ' + esc(c.memo).replace(/\n/g,'<br>') + '</div>' : '') +
       '</div>' +
     '</div>' +
-    moveBtn +
+    ((moveBtn || revertBtn) ? '<div class="ct-actions">' + revertBtn + moveBtn + '</div>' : '') +
   '</div>';
 }
 // カードのドラッグ並べ替え
@@ -8375,6 +8384,17 @@ function moveToDone(event, id){  event.stopPropagation();
   renderAll();
   toast('「' + (c.property||'契約') + '」を完了タブへ移動しました');
 }
+// キャンセル・審査落ちカードを「申込」に戻す(復活)
+function revertToApply(event, id){
+  if(event) event.stopPropagation();
+  const all = loadAll();
+  const c = all[id];
+  if(!c) return;
+  c.dealStatus = 'apply';
+  saveAll(all);
+  renderAll();
+  toast('「' + (c.property||'契約') + '」を申込に戻しました');
+}
 // カード状況プルダウンの変更
 function onCardStatusChange(event, id){
   if(event) event.stopPropagation();
@@ -8383,15 +8403,16 @@ function onCardStatusChange(event, id){
   const all = loadAll();
   const c = all[id];
   if(!c){ return; }
-  if(val === 'cancel'){
-    // キャンセル・審査落ち → グレー化。完了タブへの移動はカード上のボタンで行う(文言なし)
-    c.dealStatus = 'cancel';
+  if(val === 'cancel' || val === 'rejected'){
+    const lbl = (val === 'cancel') ? 'キャンセル' : '審査落ち';
+    // グレー化。完了タブへの移動・申込復活はカード上のボタンで行う
+    c.dealStatus = val;
     saveAll(all);
     renderAll();
     // 紐づいている駐車場予約も削除するか確認
     try{
       if(typeof window.PV_unlinkReservation === 'function'){
-        if(confirm('「' + (c.property||'契約') + '」をキャンセル・審査落ちにしました。\n紐づいている駐車場予約も削除しますか?')){
+        if(confirm('「' + (c.property||'契約') + '」を' + lbl + 'にしました。\n紐づいている駐車場予約も削除しますか?')){
           const r = window.PV_unlinkReservation({ contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking });
           if(r && r.removed > 0){ toast('駐車場予約も削除しました'); }
           else { toast('紐づく駐車場予約は見つかりませんでした'); }
@@ -9695,6 +9716,7 @@ try{window.KB.loadAll=loadAll;}catch(e){}
 try{window.KB.missingLabels=missingLabels;}catch(e){}
 try{window.KB.moveGhost=moveGhost;}catch(e){}
 try{window.KB.moveToDone=moveToDone;}catch(e){}
+try{window.KB.revertToApply=revertToApply;}catch(e){}
 try{window.KB.onCardStatusChange=onCardStatusChange;}catch(e){}
 try{window.KB.onCardClick=onCardClick;}catch(e){}
 try{window.KB.onCardDragEnd=onCardDragEnd;}catch(e){}
