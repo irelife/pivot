@@ -3464,7 +3464,7 @@ function openKeiyakuModal(spotIdx){
   // 自動セット
   document.getElementById('ky-bld-name').value = bld.name || '';
   document.getElementById('ky-bld-addr').value = bld.addr || '';
-  const spotNoStr = 'P' + String(spot.no || (spotIdx+1)).padStart(2,'0') + (spot.tou ? ' '+spot.tou+'棟' : '') + (spot.room ? ' '+spot.room : '');
+  const spotNoStr = 'P' + String(spot.no || (spotIdx+1)).padStart(2,'0') + (spot.tou ? ' '+spot.tou+'棟' : '');
   document.getElementById('ky-spot-no').value = spotNoStr;
   document.getElementById('ky-price').value = (Number(spot.price)||0).toLocaleString();
   document.getElementById('ky-tax-rate').value = '10';
