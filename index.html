@@ -1631,6 +1631,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
         <input type="text" id="f-room">
         <input type="text" id="f-parking" oninput="KB.renderSheetItemSummary()">
         <input type="text" id="f-contractor">
+        <input type="text" id="f-carContractor">
         <input type="text" id="f-corpRep">
         <input type="text" id="f-corpDept">
         <input type="text" id="f-agent">
@@ -8655,6 +8656,8 @@ function openSheet(id){
     DATE_ITEMS.forEach(it => { _editingDateValues[it.key] = c[it.key] || ''; });
   }
   fillForm(c || {stage:'申込'});
+  // 駐車場契約者: 既存データで法人名と異なる(=手入力された)場合は手動扱い
+  _carContractorManual = !!(c && c.carContractor && c.carContractor !== c.contractor);
   switchType((c && c.type) || '個人');
   switchWarn((c && c.warn) ? 1 : 0);
   _infoEditingKey = null;
@@ -9087,6 +9090,18 @@ function switchType(type){
   const lbl = document.getElementById('lbl-contractor');
   if(lbl) lbl.textContent = isCorp ? '法人名' : '契約者(個人)';
   document.querySelectorAll('.corp-only').forEach(el => el.style.display = isCorp ? 'flex' : 'none');
+  // 駐車場契約者欄の同期: 法人で空なら法人名をセット / 個人なら使わない
+  const carEl = document.getElementById('f-carContractor');
+  const conEl = document.getElementById('f-contractor');
+  if(carEl){
+    if(isCorp){
+      if(!_carContractorManual && (carEl.value.trim() === '') && conEl){ carEl.value = conEl.value; }
+    } else {
+      // 個人契約では駐車場契約者は使わない(空に)
+      carEl.value = '';
+      _carContractorManual = false;
+    }
+  }
   if(typeof renderInfoIcons === 'function') renderInfoIcons();
   if(typeof renderSheetItemSummary === 'function') renderSheetItemSummary();
 }
@@ -9120,7 +9135,9 @@ const INFO_FIELDS = [
     value:() => fmtDateVal(gv('f-contractDate')) },
   { key:'contractor', icon:'person', label:'契約者',
     inputs:() => (_editingType==='法人'
-        ? [{id:'f-contractor', label:'法人名', type:'text'},{id:'f-agent', label:'代行会社', type:'text', ph:'例: ○○管理'}]
+        ? [{id:'f-contractor', label:'法人名', type:'text'},
+           {id:'f-carContractor', label:'駐車場契約者(空欄なら法人名と同じ)', type:'text', ph:'入居者名など'},
+           {id:'f-agent', label:'代行会社', type:'text', ph:'例: ○○管理'}]
         : [{id:'f-contractor', label:'契約者(個人)', type:'text'}]),
     value:() => gv('f-contractor') },
   { key:'agency',   icon:'agency',   label:'仲介・担当',
@@ -9258,9 +9275,29 @@ function closeInfoEdit(){
   _autoSaveWasComplete = nowComplete;
 }
 function refreshInfoEdit(){ /* ポップアップ式では不要 */ }
+// 駐車場契約者を手入力で変えたかどうか(手入力されたら自動同期しない)
+let _carContractorManual = false;
 function syncInfoInput(id, val){
   const el = document.getElementById(id);
+  const carEl = document.getElementById('f-carContractor');
+  if(id === 'f-carContractor'){
+    // ユーザーが駐車場契約者を直接入力 → 以後は自動同期しない(空にすれば自動同期に戻る)
+    _carContractorManual = (val.trim() !== '');
+  }
   if(el){ el.value = val; }
+  // 法人名が変わったら、駐車場契約者が空 or 自動同期中のときは同じ名前を入れる
+  if(id === 'f-contractor' && _editingType === '法人' && carEl){
+    if(!_carContractorManual || carEl.value.trim() === ''){
+      carEl.value = val;
+      // ポップアップ表示中の駐車場契約者入力欄にも反映
+      try{
+        const popInputs = document.querySelectorAll('#info-popup-body input');
+        popInputs.forEach(pi => {
+          if(pi.getAttribute('oninput') && pi.getAttribute('oninput').indexOf('f-carContractor') >= 0){ pi.value = val; }
+        });
+      }catch(e){}
+    }
+  }
   // 契約日・P区画など連動が必要なものはイベントを発火
   if(id === 'f-contractDate'){ onContractDateChange(); }
   if(id === 'f-parking'){ renderSheetItemSummary(); }
@@ -9276,6 +9313,7 @@ function fillForm(c){
   set('f-parking', c.parking);
   set('f-pet', c.pet);
   set('f-contractor', c.contractor);
+  set('f-carContractor', c.carContractor);
   set('f-corpRep', c.corpRep);
   set('f-corpDept', c.corpDept);
   set('f-agent', c.agent);
@@ -9317,6 +9355,7 @@ function buildContractObject(){
     parking: get('f-parking'),
     pet: _editingItemValues.pet || '',
     contractor: contractor,
+    carContractor: get('f-carContractor'),
     corpRep: get('f-corpRep'),
     corpDept: get('f-corpDept'),
     agent: get('f-agent'),
@@ -9396,11 +9435,14 @@ function linkCurrentToSpot(){
     alert('物件管理が読み込まれていません。再読み込みしてください');
     return;
   }
+  // 予約に反映する名前: 駐車場契約者があればそれ、空なら契約者名(法人名)
+  const resName = (c.type === '法人' && c.carContractor && c.carContractor.trim())
+    ? c.carContractor.trim() : c.contractor;
   const res = window.PV_linkReservation({
     property: c.property,
     parking: c.parking,
     room: c.room,
-    contractor: c.contractor,
+    contractor: resName,
     contractDate: c.contractDate,
     srcKey: c.id
   });
