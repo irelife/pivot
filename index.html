@@ -4824,16 +4824,20 @@ function linkReservationToSpot(info){
   // 日付は表記ゆれ(2026/06/25 と 2026-06-25 など)を吸収して比較する。
   const nd = (v) => (typeof normalizeDate === 'function') ? (normalizeDate(v) || String(v||'').trim()) : String(v||'').trim();
   const wantDate = nd(info.contractDate);
-  const allSameAlready = targets.every(t =>
-    info.srcKey && t.res_srcKey === info.srcKey
-    && t.res_user && t.res_user === info.contractor
-    && nd(t.res_date) === wantDate);
+  // 既に「この契約」または「同じ予約者名」でこの区画に予約が入っているかを判定する。
+  // res_srcKey が(同期等で)失われていても、予約者名が一致すれば「紐づけ済み」とみなす。
+  const sameLink = (t) => {
+    const bySrc  = !!(info.srcKey && t.res_srcKey && t.res_srcKey === info.srcKey);
+    const byName = !!(t.res_user && info.contractor && t.res_user === info.contractor);
+    return bySrc || byName;
+  };
+  // すべての対象区画が「同じ予約・同じ予約日」で既に入っていれば、変更なし扱いで拒否。
+  const allSameAlready = targets.every(t => sameLink(t) && nd(t.res_date) === wantDate);
   if(allSameAlready){
     return { ok:false, reason:'already', msg:'この契約はすでに同じ内容でこの区画へ紐づけ済みです。' };
   }
-  // 同じ契約で紐づけ済みだが、内容(契約日など)が変わっている場合の上書き確認用フラグ
-  const isReLink = targets.some(t =>
-    info.srcKey && t.res_srcKey === info.srcKey && t.res_user === info.contractor);
+  // 同じ予約だが内容(予約日など)が違う → 上書き確認
+  const isReLink = targets.some(t => sameLink(t));
   // 確認ダイアログ: 対象区画の現状を見せる
   const noLabel = targets.map(t => 'P' + String(t.no).padStart(2,'0')).join('・');
   const existingResList = targets
@@ -4849,7 +4853,7 @@ function linkReservationToSpot(info){
     ? ('\n(見つからない区画: ' + missing.join('・') + ' は対象外)') : '';
   // 上書き時、既存の予約日が違っていれば「変更前→変更後」を見せる(6/24→6/25 等の修正が分かるように)
   const dateChangeNotes = targets
-    .filter(t => info.srcKey && t.res_srcKey === info.srcKey && t.res_user === info.contractor && nd(t.res_date) !== wantDate)
+    .filter(t => sameLink(t) && nd(t.res_date) !== wantDate)
     .map(t => 'P'+String(t.no).padStart(2,'0')+': 予約日 ' + (t.res_date || '(未設定)') + ' → ' + (nd(info.contractDate) || info.contractDate));
   const dateChange = dateChangeNotes.length
     ? ('\n\n■ 予約日の変更:\n' + dateChangeNotes.join('\n')) : '';
@@ -4888,6 +4892,8 @@ function linkReservationToSpot(info){
     }
   });
   saveAll(all);
+  // 予約の書き込みは即座にクラウドへ送信(後からの取り込みで消えないように)
+  try{ if(typeof window.__pushNow === 'function'){ window.__pushNow(); } }catch(e){}
   if(typeof renderList === 'function'){ try{ renderList(); }catch(e){} }
   // 物件管理タブで同じ物件を開いていれば最新データで開き直して同期。
   try{
