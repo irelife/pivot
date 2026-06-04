@@ -4896,6 +4896,28 @@ function linkReservationToSpot(info){
     return { tou:'', room: s };
   };
   let writtenDate = '';
+  // ★ 区画番号を変更した場合に備え、今回の対象区画(targets)以外に残っている
+  //    この契約の予約を先に解除する(古い区画の予約が二重に残らないように)。
+  const targetSet = new Set(targets);
+  const srcKey = info.srcKey || '';
+  const contractor = String(info.contractor || '').trim();
+  Object.values(all).forEach(bb => {
+    if(!bb || !Array.isArray(bb.spots)) return;
+    const sameBuilding = (bb === bld);
+    bb.spots.forEach(sp => {
+      if(!sp || targetSet.has(sp)) return;   // 今回書き込む区画は対象外
+      const hasRes = !!(sp.res_user || sp.res_date || sp.res_srcKey);
+      if(!hasRes) return;
+      // srcKeyが一致すれば確実にこの契約の旧予約 → どの物件でも解除。
+      // srcKeyが無い場合のみ、同じ物件内で予約者名が一致するものを解除(別物件の同名は触らない)。
+      const bySrc  = !!(srcKey && sp.res_srcKey && sp.res_srcKey === srcKey);
+      const byName = !srcKey && sameBuilding && !!(contractor && sp.res_user && sp.res_user === contractor);
+      if(bySrc || byName){
+        delete sp.res_user; delete sp.res_date; delete sp.res_srcKey;
+        delete sp.res_tou; delete sp.res_room; delete sp.res_price; delete sp.res_note;
+      }
+    });
+  });
   targets.forEach(t => {
     t.res_user = info.contractor;
     // 予約日は input[type=date] が確実に表示できる YYYY-MM-DD 形式に正規化して書き込む。
