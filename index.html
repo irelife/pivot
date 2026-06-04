@@ -4885,13 +4885,10 @@ function linkReservationToSpot(info){
   } else {
     if(!confirm(msg)){ return { ok:false, reason:'cancelled' }; }
   }
-  // ★ 別の予約者を上書きする場合は、読み飛ばし防止のため複数回 念押し確認する
+  // ★ 別の予約者を上書きする場合は、読み飛ばし防止のため もう一度だけ念押し確認する(計2回)
   if(overwriteWarn){
     const others = otherResList.join('\n');
-    if(!confirm('【重要・再確認①】\n選んだ区画には、すでに別の予約が入っています:\n' + others + '\n\nこのまま進めると、上記の予約は完全に削除され、元に戻せません。\n本当に上書きしますか?')){
-      return { ok:false, reason:'cancelled' };
-    }
-    if(!confirm('【重要・再確認②】\n念のためもう一度確認します。\n区画番号の入力ミスではありませんか?\n上書きしてよければ「OK」を押してください。')){
+    if(!confirm('【重要・再確認】\n選んだ区画には、すでに別の予約が入っています:\n' + others + '\n\nこのまま進めると、上記の予約は完全に削除され、元に戻せません。\n区画番号の入力ミスではありませんか?\n上書きしてよければ「OK」を押してください。')){
       return { ok:false, reason:'cancelled' };
     }
   }
