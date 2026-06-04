@@ -808,7 +808,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #kb-view .ct-card .ct-body, #kb-view .ct-card .ct-badge { position: relative; z-index: 2; }
   /* カード右上の削除ボタン */
   #kb-view .ct-card-del {
-    position: absolute; top: 6px; right: 6px; z-index: 5;
+    position: absolute; top: 6px; left: 6px; z-index: 7;
     width: 22px; height: 22px; border-radius: 50%;
     border: none; background: rgba(0,0,0,0.18); color: #fff;
     font-size: 15px; line-height: 1; cursor: pointer; padding: 0;
@@ -848,6 +848,30 @@ body.tab-kanban .kb-toolbar { display:flex; }
   }
   #kb-view .ct-card.done:hover .ct-move-done { opacity: 1; pointer-events: auto; }
   #kb-view .ct-move-done:hover { background: #d99e00; }
+  /* カード状況プルダウン(右上) */
+  #kb-view .ct-status-select {
+    position: absolute; top: 8px; right: 8px; z-index: 6;
+    font-size: 11px; font-weight: 800; letter-spacing: .5px;
+    border: 1.5px solid currentColor; border-radius: 999px;
+    padding: 3px 22px 3px 10px; cursor: pointer;
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat: no-repeat; background-position: right 7px center;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  #kb-view .ct-status-select:focus { outline: none; box-shadow: 0 0 0 2px rgba(0,0,0,.12); }
+  /* 状況ごとの色: 進行中=紫 / 完了=金 / キャンセル・審査落ち=グレー */
+  #kb-view .ct-status-select.ss-progress { color: #8e44d8; background-color: #f3ecfb; }
+  #kb-view .ct-status-select.ss-complete { color: #b8860b; background-color: #fff4cc; }
+  #kb-view .ct-status-select.ss-cancel   { color: #6b7280; background-color: #eceef1; }
+  /* キャンセル・審査落ちカードはグレーアウト */
+  #kb-view .ct-card.status-cancel {
+    background: #eceef1 !important; border-color: #b9bfc7 !important;
+    filter: grayscale(1); opacity: .88;
+    animation: none !important; box-shadow: none !important;
+  }
+  #kb-view .ct-card.status-cancel .ct-badge { background: #9aa1aa !important; }
+  #kb-view .ct-card.status-cancel .ct-stage-name { color: #6b7280 !important; }
   #kb-view .ct-badge {
     flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px;
     display: flex; align-items: center; justify-content: center;
@@ -4770,10 +4794,13 @@ function linkReservationToSpot(info){
   }
   // すべての対象区画が「同じ契約・同じ予約者・同じ予約日」で既に紐づけ済みなら何もしない。
   // (予約日=契約日が変わっている場合は、下の確認ダイアログで上書きできるようにする)
+  // 日付は表記ゆれ(2026/06/25 と 2026-06-25 など)を吸収して比較する。
+  const nd = (v) => (typeof normalizeDate === 'function') ? (normalizeDate(v) || String(v||'').trim()) : String(v||'').trim();
+  const wantDate = nd(info.contractDate);
   const allSameAlready = targets.every(t =>
     info.srcKey && t.res_srcKey === info.srcKey
     && t.res_user && t.res_user === info.contractor
-    && t.res_date === info.contractDate);
+    && nd(t.res_date) === wantDate);
   if(allSameAlready){
     return { ok:false, reason:'already', msg:'この契約はすでに同じ内容でこの区画へ紐づけ済みです。' };
   }
@@ -4793,7 +4820,13 @@ function linkReservationToSpot(info){
     (STATUS_LABELS[t.status] || t.status || '空き')).join('\n');
   const missingNote = missing.length
     ? ('\n(見つからない区画: ' + missing.join('・') + ' は対象外)') : '';
-  const msg = (isReLink ? '【すでに紐づけ済み — 上書き確認】\n\nこの契約はすでにこの区画へ紐づけられています。\n新しい内容で上書きしますか?(契約日の変更などを反映します)\n\n' : '【予約として紐づけ確認】\n\n') +
+  // 上書き時、既存の予約日が違っていれば「変更前→変更後」を見せる(6/24→6/25 等の修正が分かるように)
+  const dateChangeNotes = targets
+    .filter(t => info.srcKey && t.res_srcKey === info.srcKey && t.res_user === info.contractor && nd(t.res_date) !== wantDate)
+    .map(t => 'P'+String(t.no).padStart(2,'0')+': 予約日 ' + (t.res_date || '(未設定)') + ' → ' + (nd(info.contractDate) || info.contractDate));
+  const dateChange = dateChangeNotes.length
+    ? ('\n\n■ 予約日の変更:\n' + dateChangeNotes.join('\n')) : '';
+  const msg = (isReLink ? '【すでに紐づけ済み — 上書き確認】\n\nこの契約はすでにこの区画へ紐づけられています。\n内容に変更があります。新しい内容で上書きしますか?' + dateChange + '\n\n' : '【予約として紐づけ確認】\n\n') +
     '物件: ' + bldName + '\n' +
     '区画: ' + noLabel + (targets.length>1 ? '(' + targets.length + '区画同時)' : '') + '\n' +
     '予約者: ' + info.contractor + '\n' +
@@ -8016,13 +8049,22 @@ function isContractComplete(c){
 }
 // カードの状態色: complete(青) / defect(赤・基本情報未完了) / almost(緑 17〜19) / progress(紫 16以下)
 function cardStatus(c){
+  // 手動でキャンセル・審査落ちに設定されている場合は最優先(グレー)
+  if(c && c.dealStatus === 'cancel') return 'cancel';
   if(isContractComplete(c)) return 'complete';
   if(!basicInfoComplete(c)) return 'defect';
   const done = contractProgress(c).done;
   if(done >= 17) return 'almost';
   return 'progress';
 }
-const STATUS_COLOR = { complete:'#f5b400', defect:'#e60012', almost:'#34c759', progress:'#8e44d8' };
+// カードのプルダウンで選べる状況(3択)
+//  progress=進行中 / complete=完了 / cancel=キャンセル・審査落ち
+function dropdownStatus(c){
+  if(c && c.dealStatus === 'cancel') return 'cancel';
+  if(isContractComplete(c)) return 'complete';
+  return 'progress';
+}
+const STATUS_COLOR = { complete:'#f5b400', defect:'#e60012', almost:'#34c759', progress:'#8e44d8', cancel:'#9aa1aa' };
 function progressCurrentIndex(c){
   let idx = -1;
   PROGRESS_STEPS.forEach((s, i) => { if(s.done(c)) idx = i; });
@@ -8104,9 +8146,25 @@ function renderCard(c){
   const moveBtn = (isDone && !c.archived)
     ? '<button class="ct-move-done" onclick="KB.moveToDone(event,\'' + c.id + '\')">完了タブへ移動 ▸</button>'
     : '';
+
+  // 状況プルダウン(進行中 / 完了 / キャンセル・審査落ち)
+  const ddStatus = dropdownStatus(c);
+  const ssClass = ddStatus === 'complete' ? 'ss-complete' : (ddStatus === 'cancel' ? 'ss-cancel' : 'ss-progress');
+  const opt = (val, label) => '<option value="' + val + '"' + (ddStatus === val ? ' selected' : '') + '>' + label + '</option>';
+  const statusSelect =
+    '<select class="ct-status-select ' + ssClass + '"' +
+    ' onclick="event.stopPropagation();"' +
+    ' onchange="KB.onCardStatusChange(event,\'' + c.id + '\')"' +
+    ' title="この契約の状況を切り替えます">' +
+      opt('progress', '進行中') +
+      opt('complete', '完了') +
+      opt('cancel', 'キャンセル・審査落ち') +
+    '</select>';
+
   return '<div class="ct-card status-' + status + (isDone ? ' done' : '') + '" data-id="' + c.id + '" draggable="true"' +
     ' style="border-color:' + accent + ';"' +
     ' onclick="KB.onCardClick(event,\'' + c.id + '\')">' +
+    statusSelect +
     '<button class="ct-card-del" title="この契約を削除" onclick="event.stopPropagation();KB.deleteCardContract(event,\'' + c.id + '\')">×</button>' +
     '<div class="ct-badge" style="background:' + accent + ';">' +
       '<img src="' + STAGE_ICON[isDone ? 'done' : iconForStep(cur.key)] + '" alt="">' +
@@ -8176,6 +8234,39 @@ function moveToDone(event, id){  event.stopPropagation();
   saveAll(all);
   renderAll();
   toast('「' + (c.property||'契約') + '」を完了タブへ移動しました');
+}
+// カード状況プルダウンの変更
+function onCardStatusChange(event, id){
+  if(event) event.stopPropagation();
+  const sel = event && event.target;
+  const val = sel ? sel.value : '';
+  const all = loadAll();
+  const c = all[id];
+  if(!c){ return; }
+  if(val === 'cancel'){
+    c.dealStatus = 'cancel';
+    saveAll(all);
+    renderAll();
+    // キャンセル・審査落ちは完了タブへ移動できるよう案内
+    if(confirm('「' + (c.property||'契約') + '」をキャンセル・審査落ちにしました。\n完了タブへ移動しますか?')){
+      const all2 = loadAll();
+      const c2 = all2[id];
+      if(c2){
+        c2.archived = true;
+        c2.archivedAt = new Date().toISOString();
+        saveAll(all2);
+        renderAll();
+        toast('「' + (c2.property||'契約') + '」を完了タブへ移動しました');
+      }
+    } else {
+      toast('「' + (c.property||'契約') + '」をキャンセル・審査落ちにしました');
+    }
+  } else {
+    // 進行中・完了に戻す → キャンセル指定を解除(進捗の実態で色が決まる)
+    if(c.dealStatus){ delete c.dealStatus; }
+    saveAll(all);
+    renderAll();
+  }
 }
 function iconForStep(key){
   const m = {applyDate:'apply', contractDate:'cdate', sendDate:'send', returnDate:'return', paymentDate:'pay', keyHandover:'key', doneStage:'done'};
@@ -9237,7 +9328,7 @@ function linkCurrentToSpot(){
   } else if(res && res.reason === 'cancelled'){
     /* ユーザーが確認ダイアログでキャンセル: 何もしない */
   } else if(res && res.reason === 'already'){
-    alert('この契約はすでにこの区画へ予約として紐づけ済みです');
+    alert('変更がありません。\nこの内容ではすでにこの区画へ予約済みです。');
   } else if(res && res.msg){
     alert(res.msg);
   } else {
@@ -9413,6 +9504,7 @@ try{window.KB.loadAll=loadAll;}catch(e){}
 try{window.KB.missingLabels=missingLabels;}catch(e){}
 try{window.KB.moveGhost=moveGhost;}catch(e){}
 try{window.KB.moveToDone=moveToDone;}catch(e){}
+try{window.KB.onCardStatusChange=onCardStatusChange;}catch(e){}
 try{window.KB.onCardClick=onCardClick;}catch(e){}
 try{window.KB.onCardDragEnd=onCardDragEnd;}catch(e){}
 try{window.KB.onCardDragStart=onCardDragStart;}catch(e){}
