@@ -4861,15 +4861,30 @@ function linkReservationToSpot(info){
     .map(t => 'P'+String(t.no).padStart(2,'0')+': 予約日 ' + (t.res_date || '(未設定)') + ' → ' + (nd(info.contractDate) || info.contractDate));
   const dateChange = dateChangeNotes.length
     ? ('\n\n■ 予約日の変更:\n' + dateChangeNotes.join('\n')) : '';
-  const msg = (isReLink ? '【すでに紐づけ済み — 上書き確認】\n\nこの契約はすでにこの区画へ紐づけられています。\n内容に変更があります。新しい内容で上書きしますか?' + dateChange + '\n\n' : '【予約として紐づけ確認】\n\n') +
+  // ★ 別の予約者が既に入っている区画への上書き警告(誤入力対策)
+  const otherResList = targets
+    .filter(t => t.res_user && t.res_user !== info.contractor)
+    .map(t => 'P'+String(t.no).padStart(2,'0')+'「'+t.res_user+'」' + (t.res_date ? '(予約日 ' + t.res_date + ')' : ''));
+  const overwriteWarn = otherResList.length
+    ? ('⚠️ すでに別の予約が入っています。\n間違いありませんか?\n続行すると、下記の前の予約は上書きされ削除されます:\n' + otherResList.join('\n') + '\n\n')
+    : '';
+  const msg = overwriteWarn +
+    (isReLink ? '【すでに紐づけ済み — 上書き確認】\n\nこの契約はすでにこの区画へ紐づけられています。\n内容に変更があります。新しい内容で上書きしますか?' + dateChange + '\n\n' : '【予約として紐づけ確認】\n\n') +
     '物件: ' + bldName + '\n' +
     '区画: ' + noLabel + (targets.length>1 ? '(' + targets.length + '区画同時)' : '') + '\n' +
     '予約者: ' + info.contractor + '\n' +
     '予約日(契約確定日): ' + info.contractDate + '\n\n' +
     '現在の状況:\n' + curStates + '\n\n' +
     'これらの区画の予約欄に上記を「予約中」として書き込みます。\n' +
-    '(現在の使用者・状況は変更しません)' + existingRes + missingNote + '\n\nよろしいですか?';
-  if(!info.silent && !confirm(msg)){ return { ok:false, reason:'cancelled' }; }
+    '(現在の使用者・状況は変更しません)' + missingNote + '\n\nよろしいですか?';
+  // silent(復活など)でも、別の予約者を上書きする場合だけは確認する
+  if(info.silent){
+    if(overwriteWarn && !confirm(overwriteWarn + 'この区画に予約を復活します。よろしいですか?')){
+      return { ok:false, reason:'cancelled' };
+    }
+  } else {
+    if(!confirm(msg)){ return { ok:false, reason:'cancelled' }; }
+  }
   // 予約行にだけ書き込み(メイン行は触らない)
   // info.room(例「東105」「A101」)を、棟(先頭の漢字1文字またはアルファベット1文字)と
   // 号室(残りの数字部分)に分けて、それぞれ res_tou / res_room に振り分ける。
