@@ -840,16 +840,23 @@ body.tab-kanban .kb-toolbar { display:flex; }
     animation: none;       /* ホバー中は揺れを止めて操作しやすく */
     transform: translateY(-3px);
   }
-  /* 完了タブへ移動ボタン(完了カードにホバーで表示) */
+  /* 完了タブへ移動ボタン(完了/キャンセルカードに常時表示) */
   #kb-view .ct-move-done {
     position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
     background: #f5b400; color: #3a2c00; border: none; border-radius: 999px;
     padding: 7px 16px; font-size: 12px; font-weight: 800; cursor: pointer;
-    opacity: 0; pointer-events: none; transition: opacity 0.15s; white-space: nowrap;
+    opacity: 1; pointer-events: auto; transition: opacity 0.15s; white-space: nowrap;
     box-shadow: 0 4px 12px rgba(245,180,0,0.45); z-index: 5;
   }
   #kb-view .ct-card.done:hover .ct-move-done { opacity: 1; pointer-events: auto; }
   #kb-view .ct-move-done:hover { background: #d99e00; }
+  /* グレー(キャンセル・審査落ち)カード用の移動ボタン */
+  #kb-view .ct-move-done-gray { background: #6b7280; color: #fff; box-shadow: 0 4px 12px rgba(107,114,128,0.45); }
+  #kb-view .ct-move-done-gray:hover { background: #565d66; }
+  #kb-view .ct-card.status-cancel:hover .ct-move-done { opacity: 1; pointer-events: auto; }
+  /* 移動ボタンの余白を確保 */
+  #kb-view .ct-card.status-cancel { padding-bottom: 40px; }
+  #kb-view .ct-card.done { padding-bottom: 40px; }
   /* カード状況プルダウン(ヘッダー行・右寄せ) */
   #kb-view .ct-status-select {
     position: relative; z-index: 6; max-width: 100%;
@@ -4843,12 +4850,14 @@ function linkReservationToSpot(info){
     if(m){ return { tou: m[1], room: (m[2]||'').trim() }; }
     return { tou:'', room: s };
   };
+  let writtenDate = '';
   targets.forEach(t => {
     t.res_user = info.contractor;
     // 予約日は input[type=date] が確実に表示できる YYYY-MM-DD 形式に正規化して書き込む。
     // (契約日が "2026/06/25" 等の形式でも、ここで "2026-06-25" に揃える)
     const normDate = (typeof normalizeDate === 'function') ? normalizeDate(info.contractDate) : info.contractDate;
     t.res_date = normDate || info.contractDate;
+    writtenDate = t.res_date;
     if(info.srcKey) t.res_srcKey = info.srcKey;
     if(info.room){
       const sp = splitTouRoom(info.room);
@@ -4868,7 +4877,7 @@ function linkReservationToSpot(info){
       if(isOpen){ openModal(bld.id); }
     }
   }catch(e){}
-  return { ok:true, bldName: bldName, no: targets.map(t=>t.no).join('・'), count: targets.length };
+  return { ok:true, bldName: bldName, no: targets.map(t=>t.no).join('・'), count: targets.length, resDate: writtenDate };
 }
 // 契約管理(別IIFE)から呼べるよう公開
 window.PV_linkReservation = linkReservationToSpot;
@@ -8068,13 +8077,13 @@ function cardStatus(c){
 //  申込/審査中/審査完了/条件確認中/契約書類作成中/契約書類作成完了/キャンセル・審査落ち
 //  ひな形送付済み(hinagata)は法人でアイテム取得時に自動表示(手動選択肢には出さない)
 const DEAL_STATUSES = [
-  { key:'apply',      label:'申込',             color:'#8e8e93', tone:'progress' },
-  { key:'screening',  label:'審査中',           color:'#ff9500', tone:'progress' },
-  { key:'screen_ok',  label:'審査完了',         color:'#34c759', tone:'progress' },
-  { key:'condition',  label:'条件確認中',       color:'#5ac8fa', tone:'progress' },
-  { key:'doc_making', label:'契約書類作成中',   color:'#5856d6', tone:'progress' },
-  { key:'doc_done',   label:'契約書類作成完了', color:'#af52de', tone:'progress' },
-  { key:'cancel',     label:'キャンセル・審査落ち', color:'#9aa1aa', tone:'cancel' },
+  { key:'apply',      label:'申込',             text:'#3a3a3c', bg:'#e8e8ec', tone:'progress' },
+  { key:'screening',  label:'審査中',           text:'#9a5b00', bg:'#ffe9c7', tone:'progress' },
+  { key:'screen_ok',  label:'審査完了',         text:'#1f7a3d', bg:'#d8f3e2', tone:'progress' },
+  { key:'condition',  label:'条件確認中',       text:'#0a6e8e', bg:'#d4f0fb', tone:'progress' },
+  { key:'doc_making', label:'契約書類作成中',   text:'#3b39b5', bg:'#e4e3fb', tone:'progress' },
+  { key:'doc_done',   label:'契約書類作成完了', text:'#7a2fa6', bg:'#f0e1fa', tone:'progress' },
+  { key:'cancel',     label:'キャンセル・審査落ち', text:'#5b626b', bg:'#e4e6ea', tone:'cancel' },
 ];
 // 手動選択肢(プルダウンに出す順)
 const DEAL_MENU = DEAL_STATUSES;
@@ -8175,19 +8184,22 @@ function renderCard(c){
   const curName = (curIdx < 0) ? '未着手' : cur.name;
   const statusLabel = isDone ? '✓ 完了' : (status==='defect' ? '基本情報不備あり' : (status==='almost' ? 'もうすぐ完了' : '進行中'));
 
-  const moveBtn = (isDone && !c.archived)
-    ? '<button class="ct-move-done" onclick="KB.moveToDone(event,\'' + c.id + '\')">完了タブへ移動 ▸</button>'
+  const isCancel = (status === 'cancel');
+  const moveBtn = ((isDone || isCancel) && !c.archived)
+    ? '<button class="ct-move-done' + (isCancel ? ' ct-move-done-gray' : '') + '" onclick="KB.moveToDone(event,\'' + c.id + '\')">完了タブへ移動 ▸</button>'
     : '';
 
   // 状況プルダウン(7段階) + 自動表示(完了/ひな形送付済み)
   const ddStatus = dropdownStatus(c);
-  // 表示色を決定
+  // 表示色を決定(文字は濃色で見やすく、背景は淡色)
   let ddColor, ddBg, ddLabel, ddIsAuto = false;
-  if(ddStatus === 'complete'){ ddColor = '#b8860b'; ddBg = '#fff4cc'; ddLabel = '完了'; ddIsAuto = true; }
-  else if(ddStatus === 'hinagata'){ ddColor = '#1f8a43'; ddBg = '#e7f7ec'; ddLabel = 'ひな形送付済み'; ddIsAuto = true; }
+  if(ddStatus === 'complete'){ ddColor = '#8a6500'; ddBg = '#fff0bf'; ddLabel = '完了'; ddIsAuto = true; }
+  else if(ddStatus === 'hinagata'){ ddColor = '#15703a'; ddBg = '#d8f3e2'; ddLabel = 'ひな形送付済み'; ddIsAuto = true; }
   else {
     const def = dealStatusDef(ddStatus) || DEAL_STATUSES[0];
-    ddColor = def.color; ddBg = hexA(def.color, 0.14); ddLabel = def.label;
+    ddColor = def.text;        // 濃い文字色
+    ddBg = def.bg;             // 淡い背景色
+    ddLabel = def.label;
   }
   // 手動メニュー(7項目)。自動状況(完了/ひな形)のときは現在値を一時的に先頭表示
   const menuOpts = DEAL_MENU.map(s =>
@@ -8291,23 +8303,10 @@ function onCardStatusChange(event, id){
   const c = all[id];
   if(!c){ return; }
   if(val === 'cancel'){
+    // キャンセル・審査落ち → グレー化。完了タブへの移動はカード上のボタンで行う(文言なし)
     c.dealStatus = 'cancel';
     saveAll(all);
     renderAll();
-    // キャンセル・審査落ちは完了タブへ移動できるよう案内
-    if(confirm('「' + (c.property||'契約') + '」をキャンセル・審査落ちにしました。\n完了タブへ移動しますか?')){
-      const all2 = loadAll();
-      const c2 = all2[id];
-      if(c2){
-        c2.archived = true;
-        c2.archivedAt = new Date().toISOString();
-        saveAll(all2);
-        renderAll();
-        toast('「' + (c2.property||'契約') + '」を完了タブへ移動しました');
-      }
-    } else {
-      toast('「' + (c.property||'契約') + '」をキャンセル・審査落ちにしました');
-    }
   } else {
     // 申込〜契約書類作成完了 などの段階を保存
     c.dealStatus = val;
@@ -9375,7 +9374,7 @@ function linkCurrentToSpot(){
     _autoSaveWasLinkable = true;
     const noStr = String(res.no).split('・').map(n => 'P'+String(n).padStart(2,'0')).join('・');
     const cntStr = (res.count && res.count > 1) ? ('(' + res.count + '区画)') : '';
-    alert('「'+res.bldName+'」' + noStr + cntStr + ' の予約欄に予約中として登録しました');
+    alert('「'+res.bldName+'」' + noStr + cntStr + ' の予約欄に予約中として登録しました。\n予約日: ' + (res.resDate || '') + '(契約確定日と同じ日付で登録)');
   } else if(res && res.reason === 'cancelled'){
     /* ユーザーが確認ダイアログでキャンセル: 何もしない */
   } else if(res && res.reason === 'already'){
