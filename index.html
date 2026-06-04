@@ -2640,6 +2640,27 @@ window.addEventListener('visibilitychange', () => {
   }
 });
 
+// ============================================================
+// ★★★ ログインできる人の ID とパスワードの設定 ★★★
+//
+// 使い方:
+//  ・ここに { id:'ID', pass:'パスワード' } を並べると、その人がログインできます。
+//  ・人を増やすときは、行をコピーして1行追加してください。
+//  ・退職などで消すときは、その人の行を削除してください。
+//  ・IDとパスワードは ' '(シングルクオート)で囲ってください。
+//  ・下記は仮の値です。必ず本番用に書き換えてください。
+//
+// 注意: これは簡易的なログインです。F12(開発者ツール)を使える人には
+//       見破られる可能性があります。あくまで部外者・退職者が
+//       うっかり入れないようにするための簡易ロックです。
+// ============================================================
+const LOGIN_ACCOUNTS = [
+  { id: 'user1', pass: 'change-me-1' },
+  { id: 'user2', pass: 'change-me-2' },
+  { id: 'user3', pass: 'change-me-3' }
+];
+// ============================================================
+
 // ===== ログイン画面(=クラウドから最新を読み込ませる強制ステップ) =====
 function showLoginScreen(){
   const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
@@ -2652,14 +2673,28 @@ function showLoginScreen(){
   ov.innerHTML =
     '<div style="text-align:center;padding:40px 32px;max-width:340px;width:90%;">' +
       '<div style="font-size:46px;font-weight:900;letter-spacing:2px;color:#111;margin-bottom:6px;">PIVOT</div>' +
-      '<div style="font-size:13px;color:#888;margin-bottom:34px;">物件・契約 管理</div>' +
-      '<button id="pivot-login-btn" style="width:100%;padding:16px;border:none;border-radius:14px;background:#111;color:#fff;font-size:17px;font-weight:800;cursor:pointer;font-family:inherit;">ログイン(最新データを取得)</button>' +
+      '<div style="font-size:13px;color:#888;margin-bottom:28px;">物件・契約 管理</div>' +
+      '<input id="pivot-login-id" type="text" autocomplete="username" placeholder="ID" style="width:100%;padding:13px 14px;border:1.5px solid #d8d8dc;border-radius:12px;font-size:15px;margin-bottom:10px;font-family:inherit;box-sizing:border-box;">' +
+      '<input id="pivot-login-pass" type="password" autocomplete="current-password" placeholder="パスワード" style="width:100%;padding:13px 14px;border:1.5px solid #d8d8dc;border-radius:12px;font-size:15px;margin-bottom:18px;font-family:inherit;box-sizing:border-box;">' +
+      '<button id="pivot-login-btn" style="width:100%;padding:16px;border:none;border-radius:14px;background:#111;color:#fff;font-size:17px;font-weight:800;cursor:pointer;font-family:inherit;">ログイン</button>' +
       '<div id="pivot-login-msg" style="font-size:12px;color:#999;margin-top:16px;min-height:18px;"></div>' +
     '</div>';
   document.body.appendChild(ov);
   const msg = ov.querySelector('#pivot-login-msg');
   const btn = ov.querySelector('#pivot-login-btn');
-  btn.onclick = async () => {
+  const idInput = ov.querySelector('#pivot-login-id');
+  const passInput = ov.querySelector('#pivot-login-pass');
+  const doLogin = async () => {
+    const id = (idInput.value || '').trim();
+    const pass = passInput.value || '';
+    // ID・パスワードの照合
+    const ok = Array.isArray(LOGIN_ACCOUNTS) && LOGIN_ACCOUNTS.some(a => a.id === id && a.pass === pass);
+    if(!ok){
+      msg.style.color = '#d33';
+      msg.textContent = 'IDまたはパスワードが正しくありません。';
+      return;
+    }
+    msg.style.color = '#999';
     btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = '読み込み中…';
     msg.textContent = 'クラウドから最新データを取得しています…';
     try{
@@ -2668,9 +2703,13 @@ function showLoginScreen(){
       ov.remove();
     }catch(e){
       msg.textContent = '取得に失敗しました。通信を確認して、もう一度お試しください。';
-      btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'ログイン(最新データを取得)';
+      btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'ログイン';
     }
   };
+  btn.onclick = doLogin;
+  // パスワード欄でEnterキーでもログイン
+  passInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ doLogin(); } });
+  idInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ passInput.focus(); } });
 }
 
 // ログイン時のクラウド読込(クラウドのデータでローカルを置き換える)
