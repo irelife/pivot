@@ -21,8 +21,6 @@
   /* ===== 基本リセット ===== */
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
   html,body{height:100%;}
-  /* スマホで横にはみ出さないようにする(横スクロール防止) */
-  html,body{max-width:100%;overflow-x:hidden;}
   /* iPhoneのノッチ・ホームバーを避ける(セーフエリア対応) */
   body{ padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
   body{
@@ -572,12 +570,6 @@
     .form-row{gap:8px;}
     .spots-table{font-size:11px;}
     .spots-table th,.spots-table td{padding:4px 5px;}
-    /* タブバーを画面幅に収める(横はみ出し防止) */
-    .app-tabs{flex-wrap:wrap;gap:8px;padding:10px 12px 0;max-width:100%;}
-    .app-pivot-logo{font-size:22px;margin-right:6px;}
-    .app-tab{font-size:13px;padding:8px 14px;}
-    .kb-toolbar{margin-left:0;width:100%;flex-wrap:wrap;gap:6px;}
-    .kb-toolbar .search-input{width:100%;margin-left:0;order:0;}
   }
 
 /* ===== 統合タブ ===== */
@@ -780,14 +772,13 @@ body.tab-kanban .kb-toolbar { display:flex; }
   }
 
   #kb-view .board-wrap { padding: 8px 24px 40px; overflow-x: hidden; }
-  /* ===== 契約一覧(画面幅に入るだけ並べ、入らなければ下段へ。カード最低260px) ===== */
+  /* ===== 契約一覧(4列で折り返し) ===== */
   #kb-view .contract-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    display: grid; grid-template-columns: repeat(4, 1fr);
     gap: 16px; padding: 10px 4px 20px;
-    width: 100%; flex: 1 1 100%;
   }
   #kb-view .empty-grid { padding: 60px 20px; text-align: center; color: #9aa0a6; font-size: 14px; }
+  @media (max-width: 1100px) { #kb-view .contract-grid { grid-template-columns: repeat(3, 1fr); } }
   #kb-view .autosave-note { margin-left: auto; margin-right: 12px; font-size: 12px; color: #34c759; font-weight: 700; }
   #kb-view .ct-card {
     display: flex; gap: 12px; align-items: flex-start; position: relative;
@@ -1403,18 +1394,10 @@ body.tab-kanban .kb-toolbar { display:flex; }
     #kb-view .search-input { width: 100%; }
     #kb-view .board-wrap { padding: 4px 16px 20px; }
     #kb-view .column { flex: 0 0 250px; }
+    #kb-view .contract-grid { grid-template-columns: repeat(2, 1fr); }
     #kb-view .sheet { max-width: 100%; }
     #kb-view .field-grid, #kb-view .field-grid.col3 { grid-template-columns: 1fr 1fr; }
     #kb-view .field.span2, #kb-view .field.span3 { grid-column: span 2; }
-  }
-  /* スマホ縦画面: 入る分だけ並べ、入らなければ下段へ。カードがはみ出さないよう文字を折り返す */
-  @media (max-width: 600px) {
-    #kb-view .contract-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; padding: 10px 14px 20px; width: 100%; flex: 1 1 100%; }
-    #kb-view .ct-card { width: 100%; min-width: 0; }
-    #kb-view .ct-card * { min-width: 0; }
-    #kb-view .ct-body { min-width: 0; flex: 1 1 auto; }
-    #kb-view .ct-body .card-title { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
-    #kb-view .ct-body .card-sub { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
   }
   /* ===== 完了お祝い演出(body直下に出すため #kb-view で限定しない) ===== */
   .celebrate-overlay {
@@ -1449,39 +1432,6 @@ body.tab-kanban .kb-toolbar { display:flex; }
     100% { transform: translateY(105vh) rotate(720deg); opacity: 0.9; }
   }
 
-  /* ===== 書類プレビュー オーバーレイ ===== */
-  #doc-overlay { position: fixed; inset: 0; z-index: 99999; background: #4a4a4a; display: flex; flex-direction: column; }
-  .doc-ov-bar { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; background: #111; color: #fff; padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
-  .doc-ov-title { font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .doc-ov-actions { display: flex; gap: 8px; flex: 0 0 auto; }
-  .doc-ov-btn { border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; }
-  .doc-ov-print { background: #2563eb; color: #fff; }
-  .doc-ov-close { background: #fff; color: #111; }
-  .doc-ov-btn:active { opacity: .85; }
-  .doc-ov-body { flex: 1 1 auto; overflow: auto; -webkit-overflow-scrolling: touch; padding: 16px; display: flex; justify-content: center; }
-  .doc-ov-content { width: 100%; max-width: 1100px; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.4); padding: 12mm; box-sizing: border-box; }
-  .doc-ov-content img { max-width: 100%; height: auto; }
-  @media (max-width: 600px) {
-    .doc-ov-bar { flex-wrap: wrap; gap: 8px; }
-    .doc-ov-title { flex: 1 1 100%; font-size: 14px; }
-    .doc-ov-actions { flex: 1 1 100%; }
-    .doc-ov-btn { flex: 1 1 0; padding: 11px 8px; }
-    .doc-ov-body { padding: 8px; }
-    .doc-ov-content { padding: 6mm; }
-  }
-  /* 印刷時: 書類オーバーレイが開いているときは、本体(物件一覧など)を全て隠し、書類だけを印刷する */
-  @media print {
-    body.doc-printing > *:not(#doc-overlay) { display: none !important; }
-    body.doc-printing #doc-overlay { position: static !important; background: #fff !important; display: block !important; overflow: visible !important; }
-    body.doc-printing #doc-overlay .doc-ov-bar { display: none !important; }
-    body.doc-printing #doc-overlay .doc-ov-body { display: block !important; padding: 0 !important; overflow: visible !important; justify-content: flex-start !important; }
-    body.doc-printing #doc-overlay .doc-ov-content { box-shadow: none !important; max-width: none !important; width: 100% !important; padding: 0 !important; overflow: visible !important; height: auto !important; }
-    /* 承諾書など複数ページ書類の改ページを確実に効かせる */
-    body.doc-printing #doc-overlay .page-break { page-break-after: always !important; break-after: page !important; display: block !important; height: 0 !important; }
-    body.doc-printing #doc-overlay .page-shozai { page-break-before: always !important; break-before: page !important; }
-    body.doc-printing #doc-overlay .page { overflow: visible !important; }
-  }
-
 </style>
 </head>
 <body>
@@ -1511,14 +1461,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
     </div>
     <button class="btn-primary" onclick="KB.openSheet()">＋ 新規</button>
   </div>
-  <span id="login-user-label" style="display:none;align-items:center;gap:5px;font-size:12px;font-weight:700;color:#555;background:#f0f0f3;padding:5px 12px;border-radius:999px;white-space:nowrap;margin-left:auto;" title="ログイン中のユーザー"></span>
-  <div class="settings-wrap" id="logout-wrap" style="display:none;">
-    <button class="btn btn-outline btn-sm settings-gear" onclick="pivotLogout()" title="ログアウト" aria-label="ログアウト">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;vertical-align:middle;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-      <span class="settings-gear-label">ログアウト</span>
-    </button>
-  </div>
-  <div class="settings-wrap" style="margin-left:0;">
+  <div class="settings-wrap" style="margin-left:auto;">
     <button class="btn btn-outline btn-sm settings-gear" onclick="toggleSettingsMenu(event)" title="設定メニュー" aria-label="設定">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;vertical-align:middle;"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
       <span class="settings-gear-label">設定</span>
@@ -2558,17 +2501,6 @@ function scheduleAutoPush(){
 }
 try{ window.__scheduleAutoPush = scheduleAutoPush; }catch(e){}
 
-// 重要な変更(契約の削除・追加など)で即時にクラウドへ送るための関数。
-// デバウンス(1.2秒待ち)を挟まず、すぐに送信する。
-function pushNow(){
-  if(_autoPushTimer){ clearTimeout(_autoPushTimer); _autoPushTimer = null; }
-  touchLocalMtime();
-  _hasUnsavedChanges = true;
-  setSyncStatus('saving', '⏳ 保存中…');
-  doAutoPush();
-}
-try{ window.__pushNow = pushNow; }catch(e){}
-
 async function doAutoPush(){
   const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
   if(!url) return;
@@ -2647,53 +2579,6 @@ window.addEventListener('visibilitychange', () => {
   }
 });
 
-// ============================================================
-// ★★★ ログインできる人の ID とパスワードの設定 ★★★
-//
-// 使い方:
-//  ・ここに { id:'ID', pass:'パスワード' } を並べると、その人がログインできます。
-//  ・人を増やすときは、行をコピーして1行追加してください。
-//  ・退職などで消すときは、その人の行を削除してください。
-//  ・IDとパスワードは ' '(シングルクオート)で囲ってください。
-//  ・下記は仮の値です。必ず本番用に書き換えてください。
-//
-// 注意: これは簡易的なログインです。F12(開発者ツール)を使える人には
-//       見破られる可能性があります。あくまで部外者・退職者が
-//       うっかり入れないようにするための簡易ロックです。
-// ============================================================
-const LOGIN_ACCOUNTS = [
-  { id: 'irelife', pass: 'taki' },
-  { id: 'irelife2', pass: 'nishizawa' },
-  { id: 'irelife3', pass: 'asano' }
-];
-// ============================================================
-
-// 現在ログイン中のユーザーID
-let _pivotCurrentUser = '';
-
-// 画面の「ログイン中：〇〇」表示とログアウトボタンの表示を更新
-function updateLoginUserLabel(){
-  const label = document.getElementById('login-user-label');
-  const logoutWrap = document.getElementById('logout-wrap');
-  if(_pivotCurrentUser){
-    if(label){ label.textContent = 'ログイン中：' + _pivotCurrentUser; label.style.display = 'inline-flex'; }
-    if(logoutWrap){ logoutWrap.style.display = 'inline-block'; }
-  } else {
-    if(label){ label.style.display = 'none'; label.textContent = ''; }
-    if(logoutWrap){ logoutWrap.style.display = 'none'; }
-  }
-}
-
-// ログアウト: ログイン中表示を消して、ログイン画面に戻す
-function pivotLogout(){
-  if(!confirm('ログアウトしますか？\nもう一度ID・パスワードの入力が必要になります。')) return;
-  _pivotCurrentUser = '';
-  updateLoginUserLabel();
-  // ログイン画面を再表示
-  if(typeof showLoginScreen === 'function'){ showLoginScreen(); }
-}
-try{ window.pivotLogout = pivotLogout; }catch(e){}
-
 // ===== ログイン画面(=クラウドから最新を読み込ませる強制ステップ) =====
 function showLoginScreen(){
   const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
@@ -2706,45 +2591,25 @@ function showLoginScreen(){
   ov.innerHTML =
     '<div style="text-align:center;padding:40px 32px;max-width:340px;width:90%;">' +
       '<div style="font-size:46px;font-weight:900;letter-spacing:2px;color:#111;margin-bottom:6px;">PIVOT</div>' +
-      '<div style="font-size:13px;color:#888;margin-bottom:28px;">物件・契約 管理</div>' +
-      '<input id="pivot-login-id" type="text" autocomplete="username" placeholder="ID" style="width:100%;padding:13px 14px;border:1.5px solid #d8d8dc;border-radius:12px;font-size:15px;margin-bottom:10px;font-family:inherit;box-sizing:border-box;">' +
-      '<input id="pivot-login-pass" type="password" autocomplete="current-password" placeholder="パスワード" style="width:100%;padding:13px 14px;border:1.5px solid #d8d8dc;border-radius:12px;font-size:15px;margin-bottom:18px;font-family:inherit;box-sizing:border-box;">' +
-      '<button id="pivot-login-btn" style="width:100%;padding:16px;border:none;border-radius:14px;background:#111;color:#fff;font-size:17px;font-weight:800;cursor:pointer;font-family:inherit;">ログイン</button>' +
+      '<div style="font-size:13px;color:#888;margin-bottom:34px;">物件・契約 管理</div>' +
+      '<button id="pivot-login-btn" style="width:100%;padding:16px;border:none;border-radius:14px;background:#111;color:#fff;font-size:17px;font-weight:800;cursor:pointer;font-family:inherit;">ログイン(最新データを取得)</button>' +
       '<div id="pivot-login-msg" style="font-size:12px;color:#999;margin-top:16px;min-height:18px;"></div>' +
     '</div>';
   document.body.appendChild(ov);
   const msg = ov.querySelector('#pivot-login-msg');
   const btn = ov.querySelector('#pivot-login-btn');
-  const idInput = ov.querySelector('#pivot-login-id');
-  const passInput = ov.querySelector('#pivot-login-pass');
-  const doLogin = async () => {
-    const id = (idInput.value || '').trim();
-    const pass = passInput.value || '';
-    // ID・パスワードの照合
-    const ok = Array.isArray(LOGIN_ACCOUNTS) && LOGIN_ACCOUNTS.some(a => a.id === id && a.pass === pass);
-    if(!ok){
-      msg.style.color = '#d33';
-      msg.textContent = 'IDまたはパスワードが正しくありません。';
-      return;
-    }
-    msg.style.color = '#999';
+  btn.onclick = async () => {
     btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = '読み込み中…';
     msg.textContent = 'クラウドから最新データを取得しています…';
     try{
       await loginPull();
       msg.textContent = '完了しました';
-      // ログインした人のIDを記録して、画面に表示
-      try{ _pivotCurrentUser = id; updateLoginUserLabel(); }catch(e){}
       ov.remove();
     }catch(e){
       msg.textContent = '取得に失敗しました。通信を確認して、もう一度お試しください。';
-      btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'ログイン';
+      btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'ログイン(最新データを取得)';
     }
   };
-  btn.onclick = doLogin;
-  // パスワード欄でEnterキーでもログイン
-  passInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ doLogin(); } });
-  idInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ passInput.focus(); } });
 }
 
 // ログイン時のクラウド読込(クラウドのデータでローカルを置き換える)
@@ -2766,46 +2631,6 @@ async function loginPull(){
   setSyncStatus('saved', '✅ ログイン済み(最新)');
   setTimeout(() => { const e=document.getElementById('sync-status'); if(e && e.dataset.state==='saved') setSyncStatus('idle',''); }, 2500);
 }
-
-// タブ・ロゴから呼ぶ「最新を取り込む」関数。
-// 時刻判定をせず、必ずクラウドの内容で画面を更新する(クラウドが更新時刻を返さない環境でも確実に反映)。
-// ただし未保存の変更があるときは、上書きで消えないよう確認してから取り込む。
-async function forcePullLatest(){
-  const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
-  if(!url) return;
-  // 未保存の変更があれば、確認を出さずに、まず保存(送信)を済ませてから最新を取り込む。
-  // (自動保存される仕組みなので、いちいち確認は出さない)
-  if(_hasUnsavedChanges || _autoPushInFlight){
-    try{ if(typeof pushNow === 'function'){ pushNow(); } }catch(e){}
-    // 送信完了を少し待つ(最大3秒)
-    for(let i=0; i<15 && (_hasUnsavedChanges || _autoPushInFlight); i++){
-      await new Promise(r=>setTimeout(r, 200));
-    }
-  }
-  setSyncStatus('loading', '☁️ 確認中…');
-  try{
-    const r = await postToGas(url, { action:'load' });
-    if(r && r.ok){
-      const payload = r.payload || {};
-      const buildings = payload.buildings || {};
-      const contracts = payload.contracts || {};
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(buildings));
-      localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts || {}));
-      const cloudMtime = parseInt(payload.mtime || '0', 10) || Date.now();
-      try{ localStorage.setItem(MTIME_KEY, String(cloudMtime)); }catch(e){}
-      _hasUnsavedChanges = false;
-      if(typeof renderAll === 'function') renderAll();
-      if(typeof window.KB !== 'undefined' && typeof window.KB.renderAll === 'function'){ try{ window.KB.renderAll(); }catch(e){} }
-      setSyncStatus('saved', '✅ 最新です');
-      setTimeout(() => { const e=document.getElementById('sync-status'); if(e && e.dataset.state==='saved') setSyncStatus('idle',''); }, 2000);
-    } else {
-      setSyncStatus('error', '⚠️ 取得失敗');
-    }
-  }catch(e){
-    setSyncStatus('error', '⚠️ 取得失敗(通信)');
-  }
-}
-try{ window.forcePullLatest = forcePullLatest; }catch(e){}
 
 function genId(){
   return 'bld_' + Date.now() + '_' + Math.floor(Math.random()*1000);
@@ -3302,6 +3127,12 @@ function generateShoudakuPrint(data){
   }
   const periodFromYMD = splitYMD(data.periodFrom);
   const periodToYMD = splitYMD(data.periodTo);
+  // 別タブで開く
+  const win = window.open('', '_blank');
+  if(!win){
+    alert('ポップアップがブロックされています。\nブラウザのポップアップを許可してください。');
+    return;
+  }
 
   const layoutImgHtml = data.layoutImageUrl
     ? '<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;"><img src="'+data.layoutImageUrl+'" style="max-width:100%;max-height:420px;object-fit:contain;"></div>'
@@ -3316,10 +3147,9 @@ function generateShoudakuPrint(data){
     '<style>' +
     '@page{size:A4 landscape;margin:8mm 12mm;}' +
     'body{font-family:"MS Gothic","Yu Gothic",sans-serif;font-size:11pt;color:#000;line-height:1.5;margin:0;}' +
-    '.page-break{page-break-after:always;break-after:page;height:0;display:block;}' +
+    '.page-break{page-break-after:always;}' +
     '.page{padding:0;}' +
-    '.page-shoudaku{}' +
-    '.page-shozai{page-break-inside:avoid;page-break-before:always;break-before:page;}' +
+    '.page-shozai{page-break-inside:avoid;page-break-before:always;}' +
     'h1{font-size:18pt;text-align:center;border:1.5px solid #000;padding:8px;margin:0 0 10px;letter-spacing:6px;}' +
     'h2{font-size:14pt;text-align:center;margin:4px 0 8px;font-weight:700;letter-spacing:4px;}' +
     '.section-title{font-size:11pt;text-align:right;margin-bottom:4px;}' +
@@ -3418,6 +3248,8 @@ function generateShoudakuPrint(data){
     '<p style="font-size:9pt;margin-top:4px;">備考　用紙の大きさは、日本産業規格Ａ４とする。</p>' +
     '</div>' +
 
+    '<div class="page-break"></div>' +
+
     /* 2枚目: 別記様式第2号(A4横向き) */
     '<div class="page page-shozai">' +
     '<div style="text-align:right;font-size:9pt;margin-bottom:4px;">別記様式第2号</div>' +
@@ -3461,62 +3293,9 @@ function generateShoudakuPrint(data){
     '<\/scr'+'ipt>' +
 
     '<\/body><\/html>';
-  // 承諾書は新しいタブで開いて印刷する(A4横2枚の改ページを確実にするため)
-  try{
-    const w = window.open('', '_blank');
-    if(w && w.document){
-      w.document.open();
-      w.document.write(html);
-      w.document.close();
-    } else {
-      // ポップアップがブロックされた場合はオーバーレイ表示にフォールバック
-      showDocOverlay(html, '📋 保管場所使用承諾書');
-    }
-  }catch(e){
-    showDocOverlay(html, '📋 保管場所使用承諾書');
-  }
+  win.document.write(html);
+  win.document.close();
 }
-
-// ==============================
-// 書類を画面内オーバーレイで表示(印刷時は書類だけを残し、後ろの本体は隠す)
-// ==============================
-function showDocOverlay(html, title){
-  closeDocOverlay();
-  let styleHtml = '';
-  const styleMatches = html.match(/<style[^>]*>[\s\S]*?<\/style>/gi);
-  if(styleMatches){ styleHtml = styleMatches.join('\n'); }
-  let bodyHtml = '';
-  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  if(bodyMatch){ bodyHtml = bodyMatch[1]; } else { bodyHtml = html; }
-  bodyHtml = bodyHtml.replace(/<script[\s\S]*?<\/script>/gi, '');
-  const ov = document.createElement('div');
-  ov.id = 'doc-overlay';
-  ov.innerHTML =
-    '<div class="doc-ov-bar">' +
-      '<span class="doc-ov-title">' + (title || '書類') + '</span>' +
-      '<div class="doc-ov-actions">' +
-        '<button type="button" class="doc-ov-btn doc-ov-print" onclick="printDocOverlay()">🖨 PDF保存 / 印刷</button>' +
-        '<button type="button" class="doc-ov-btn doc-ov-close" onclick="closeDocOverlay()">✕ 閉じる</button>' +
-      '</div>' +
-    '</div>' +
-    '<div class="doc-ov-body"><div id="doc-ov-content" class="doc-ov-content">' + styleHtml + bodyHtml + '</div></div>';
-  document.body.appendChild(ov);
-  document.body.style.overflow = 'hidden';
-}
-function printDocOverlay(){
-  document.body.classList.add('doc-printing');
-  const cleanup = function(){ document.body.classList.remove('doc-printing'); window.removeEventListener('afterprint', cleanup); };
-  window.addEventListener('afterprint', cleanup);
-  setTimeout(function(){ try{ window.print(); }catch(e){} }, 100);
-  setTimeout(cleanup, 60000);
-}
-function closeDocOverlay(){
-  const ov = document.getElementById('doc-overlay');
-  if(ov){ ov.remove(); }
-  document.body.classList.remove('doc-printing');
-  document.body.style.overflow = '';
-}
-try{ window.printDocOverlay = printDocOverlay; window.closeDocOverlay = closeDocOverlay; }catch(e){}
 
 // ==============================
 // 駐車場賃貸借契約書(発行モーダル)
@@ -3538,7 +3317,7 @@ function openKeiyakuModal(spotIdx){
   // 自動セット
   document.getElementById('ky-bld-name').value = bld.name || '';
   document.getElementById('ky-bld-addr').value = bld.addr || '';
-  const spotNoStr = 'P' + String(spot.no || (spotIdx+1)).padStart(2,'0') + (spot.tou ? ' '+spot.tou+'棟' : '');
+  const spotNoStr = 'P' + String(spot.no || (spotIdx+1)).padStart(2,'0') + (spot.tou ? ' '+spot.tou+'棟' : '') + (spot.room ? ' '+spot.room : '');
   document.getElementById('ky-spot-no').value = spotNoStr;
   document.getElementById('ky-price').value = (Number(spot.price)||0).toLocaleString();
   document.getElementById('ky-tax-rate').value = '10';
@@ -3594,6 +3373,9 @@ function printKeiyaku(){
 }
 
 function generateKeiyakuPrint(data){
+  const win = window.open('', '_blank');
+  if(!win){ alert('ポップアップがブロックされています。\nブラウザのポップアップを許可してください。'); return; }
+
   // 日付フォーマッタ
   const fmtJp = (dateStr) => {
     if(!dateStr) return '　　　年　　月　　日';
@@ -3620,11 +3402,9 @@ function generateKeiyakuPrint(data){
   const html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>駐車場賃貸借契約書</title>' +
     '<style>' +
     '@page{size:A3 landscape;margin:7mm 8mm;}' +
-    'html,body{margin:0;padding:0;}' +
     'body{font-family:"MS Mincho","Yu Mincho",serif;font-size:12.5pt;color:#000;line-height:1.7;margin:0;}' +
-    '.sheet{width:100%;page-break-inside:avoid;break-inside:avoid;page-break-after:avoid;break-after:avoid;overflow:hidden;}' +
-    '@media print{.sheet{page-break-after:avoid;break-after:avoid;} .sheet *{page-break-inside:avoid;}}' +
-    '.title{font-size:26pt;text-align:center;font-weight:700;letter-spacing:14px;margin:8px 0 40px 0;}' +
+    '.sheet{width:100%;page-break-inside:avoid;break-inside:avoid;}' +
+    '.title{font-size:26pt;text-align:center;font-weight:700;letter-spacing:14px;margin:2px 0 22px 0;}' +
     '.cols{display:grid;grid-template-columns:1fr 1fr;gap:12mm;}' +
     '.col{}' +
     '.lead{font-size:12.5pt;margin:0 0 6px;line-height:1.75;}' +
@@ -3646,6 +3426,12 @@ function generateKeiyakuPrint(data){
     '.inkan-mark-kou{right:44px;}' +
     '.sign-name-otsu{display:flex;align-items:center;}' +
     '.tail-text{font-size:12.5pt;margin:6px 0 3px;line-height:1.8;}' +
+    '</style></head><body>' +
+    '</style></head><body>' +
+    '</style></head><body>' +
+    '</style></head><body>' +
+    '</style></head><body>' +
+    '</style></head><body>' +
     '</style></head><body>' +
     '<div class="sheet">' +
       '<h1 class="title">駐車場賃貸借契約書</h1>' +
@@ -3724,8 +3510,8 @@ function generateKeiyakuPrint(data){
     '});' +
     '<\/scr'+'ipt>' +
     '<\/body><\/html>';
-  showDocOverlay(html, '📝 駐車場賃貸借契約書');
-
+  win.document.write(html);
+  win.document.close();
 }
 
 // ==============================
@@ -3819,14 +3605,7 @@ function calcNissariUnitPrice(){
   const day = start.getDate();
   const billDays = daysInMonth - day + 1;
   // 日割り単価(税抜) = 月額税抜 × (billDays / daysInMonth)
-  // 月額は、まず物件に登録された月額(monthlyNoTax)を使う。
-  // 0円の場合は、請求項目の「駐車場使用料」行に入力された単価を月額とみなす。
-  let monthlyNoTax = _seikyuContext.monthlyNoTax || 0;
-  if(monthlyNoTax <= 0){
-    // 日割り行・手数料行ではない最初の項目(=駐車場使用料)の単価を使う
-    const base = _seikyuItems.find(it => it._kind !== 'nissari' && it._kind !== 'chukai' && it._kind !== 'meigi' && it._kind !== 'shoudaku' && (Number(it.unitPrice) > 0));
-    if(base){ monthlyNoTax = Number(base.unitPrice) || 0; }
-  }
+  const monthlyNoTax = _seikyuContext.monthlyNoTax || 0;
   if(monthlyNoTax <= 0) return null;
   const nissariNoTax = Math.round(monthlyNoTax * billDays / daysInMonth);
   return {
@@ -3861,7 +3640,7 @@ function onSeikyuStartDateChange(){
 function addTplNissari(){
   const calc = calcNissariUnitPrice();
   if(!calc){
-    alert('区画の月額が0円のため計算できません。\n単価欄に月額を入力してから、もう一度お試しください。');
+    alert('契約開始日を入力してください。\nまた、区画の月額が0円の場合は計算できません。');
     return;
   }
   // 既存の日割り行があれば置き換える
@@ -3981,7 +3760,7 @@ function addTplShoudaku(){
 function addTplShokai(){
   const calc = calcNissariUnitPrice();
   if(!calc){
-    alert('区画の月額が0円のため計算できません。\n単価欄に月額を入力してから、もう一度お試しください。');
+    alert('契約開始日を入力してください。\nまた、区画の月額が0円の場合は計算できません。');
     return;
   }
   // 既存の駐車場使用料行(_kindなし、初期セット行)は削除
@@ -4085,6 +3864,9 @@ function printSeikyu(){
 }
 
 function generateSeikyuPrint(data){
+  const win = window.open('', '_blank');
+  if(!win){ alert('ポップアップがブロックされています。\nブラウザのポップアップを許可してください。'); return; }
+
   const fmtJp = (dateStr) => {
     if(!dateStr) return '';
     const m = String(dateStr).match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
@@ -4167,13 +3949,13 @@ function generateSeikyuPrint(data){
     /* 印刷時も全ての背景色・文字色を維持 */
     '@media print{*{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}html,body{height:auto;}}' +
     /* sheet全体を縦flexに: 上から請求書本体、最下段に下ボックスを押し出す */
-    '.sheet{width:100%;min-height:auto;display:flex;flex-direction:column;page-break-inside:avoid;color:#000;box-sizing:border-box;}' +
-    '@media print{.sheet{min-height:auto;page-break-after:avoid;page-break-inside:avoid;}}' +
+    '.sheet{width:100%;min-height:273mm;display:flex;flex-direction:column;page-break-inside:avoid;color:#000;box-sizing:border-box;}' +
+    '@media print{.sheet{min-height:calc(297mm - 20mm);page-break-after:avoid;}}' +
     '.sheet-main{flex:0 0 auto;}' +
     '.sheet-bottom{margin-top:auto;padding-top:10mm;}' +
     '.title{font-size:26pt;text-align:center;font-weight:700;letter-spacing:18px;margin:0 0 10px 0;border-bottom:3px double #000;padding-bottom:6px;color:#000 !important;}' +
-    '.logo-bar{margin-bottom:4px;text-align:left;}' +
-    '.logo-img{height:28px;width:auto;display:block;}' +
+    '.logo-bar{margin-bottom:2px;}' +
+    '.logo-img{height:48px;width:auto;display:block;}' +
     '.head-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;color:#000;}' +
     '.to-block{flex:1;color:#000;}' +
     '.to-name{font-size:17pt;font-weight:700;border-bottom:1px solid #000;padding:5px 4px 5px 0;display:inline-block;min-width:260px;color:#000 !important;}' +
@@ -4217,6 +3999,7 @@ function generateSeikyuPrint(data){
     '</style></head><body>' +
     '<div class="sheet">' +
       '<div class="sheet-main">' +
+      '<div class="logo-bar"><img src="' + LOGO_BASE64 + '" alt="IRE Life" class="logo-img"></div>' +
       '<h1 class="title">請求書</h1>' +
       '<div class="head-row">' +
         '<div class="to-block">' +
@@ -4269,8 +4052,8 @@ function generateSeikyuPrint(data){
     '});' +
     '<\/scr'+'ipt>' +
     '<\/body><\/html>';
-  showDocOverlay(html, '💴 請求書');
-
+  win.document.write(html);
+  win.document.close();
 }
 
 function openModal(id){
@@ -4521,15 +4304,10 @@ function showUnsavedDialog(){
 // PIVOTロゴ: トップページ(物件一覧)へ戻る
 function goToTop(){
   closeModal();
-  if(document.getElementById('modal') && document.getElementById('modal').classList.contains('active')){ return; }
-  // 契約管理タブを開いている場合は、物件管理タブへ戻す(switchApp側で最新取得が走る)
-  if(document.body.classList.contains('tab-kanban')){
-    if(typeof switchApp === 'function'){ switchApp('pivot'); }
-  } else {
-    // 物件管理タブにいるときは、ここで最新を取り込む(未保存時のみ確認)
-    try{ if(typeof window.forcePullLatest === 'function'){ window.forcePullLatest(); } }catch(e){}
+  // 閉じられた(未保存確認でキャンセルされていない)場合のみトップへ
+  if(!document.getElementById('modal').classList.contains('active')){
+    window.scrollTo(0, 0);
   }
-  window.scrollTo(0, 0);
 }
 
 // ===== 契約管理→PIVOT 連携: 区画の予約行に「予約中」を書き込む =====
@@ -4622,24 +4400,11 @@ function linkReservationToSpot(info){
     '(現在の使用者・状況は変更しません)' + existingRes + missingNote + '\n\nよろしいですか?';
   if(!confirm(msg)){ return { ok:false, reason:'cancelled' }; }
   // 予約行にだけ書き込み(メイン行は触らない)
-  // info.room(例「東105」「A101」)を、棟(先頭の漢字1文字またはアルファベット1文字)と
-  // 号室(残りの数字部分)に分けて、それぞれ res_tou / res_room に振り分ける。
-  const splitTouRoom = (raw) => {
-    const s = String(raw || '').trim();
-    if(!s) return { tou:'', room:'' };
-    const m = s.match(/^([東西南北]|[A-Za-z])\s*(.*)$/);
-    if(m){ return { tou: m[1], room: (m[2]||'').trim() }; }
-    return { tou:'', room: s };
-  };
   targets.forEach(t => {
     t.res_user = info.contractor;
     t.res_date = info.contractDate;
     if(info.srcKey) t.res_srcKey = info.srcKey;
-    if(info.room){
-      const sp = splitTouRoom(info.room);
-      t.res_tou = sp.tou;
-      t.res_room = sp.room;
-    }
+    if(info.room) t.res_room = info.room;
   });
   saveAll(all);
   if(typeof renderList === 'function'){ try{ renderList(); }catch(e){} }
@@ -7496,8 +7261,6 @@ function switchApp(which){
   document.getElementById('tab-pivot').classList.toggle('active', which!=='kanban');
   document.getElementById('tab-kanban').classList.toggle('active', which==='kanban');
   if(which==='kanban' && window.KB && window.KB.renderAll){ try{ window.KB.renderAll(); }catch(e){} }
-  // タブを押すたびにクラウドから最新を取り込む(未保存時のみ確認)
-  try{ if(typeof window.forcePullLatest === 'function'){ window.forcePullLatest(); } }catch(e){}
 }
 </script>
 <script>
@@ -7508,11 +7271,8 @@ const STORAGE_KEY = 'contract_kanban_v2';
 function loadAll(){ try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e){ return {}; } }
 function saveAll(d){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
-  // 契約データの変更は即座にクラウドへ送信(削除直後にリロードしても間に合うように)
-  try{
-    if(typeof window.__pushNow === 'function'){ window.__pushNow(); }
-    else if(typeof window.__scheduleAutoPush === 'function'){ window.__scheduleAutoPush(); }
-  }catch(e){}
+  // 契約データの変更もクラウドへ自動送信(物件側で定義した同期をグローバル経由で呼ぶ)
+  try{ if(typeof window.__scheduleAutoPush === 'function'){ window.__scheduleAutoPush(); } }catch(e){}
 }
 function genId(){ return 'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function today(){ return new Date().toISOString().slice(0,10); }
