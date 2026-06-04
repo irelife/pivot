@@ -790,11 +790,13 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #kb-view .empty-grid { padding: 60px 20px; text-align: center; color: #9aa0a6; font-size: 14px; }
   #kb-view .autosave-note { margin-left: auto; margin-right: 12px; font-size: 12px; color: #34c759; font-weight: 700; }
   #kb-view .ct-card {
-    display: flex; gap: 12px; align-items: flex-start; position: relative;
+    display: flex; flex-direction: column; gap: 6px; align-items: stretch; position: relative;
     background: #fff; border: 2px solid #d8d8dc; border-radius: 16px;
-    padding: 14px 16px; cursor: pointer;
+    padding: 12px 16px 14px; cursor: pointer;
     transition: transform 0.12s, box-shadow 0.12s;
   }
+  #kb-view .ct-head { display: flex; justify-content: flex-end; align-items: center; min-height: 24px; }
+  #kb-view .ct-main { display: flex; gap: 12px; align-items: flex-start; }
   #kb-view .ct-card { cursor: pointer; }
   /* 状態別の薄い背景: 不備=薄赤 → 進行中=薄紫 → もうすぐ=薄緑 → 完了=薄黄 */
   #kb-view .ct-card.status-defect   { background: #ffe9e9; }
@@ -848,22 +850,18 @@ body.tab-kanban .kb-toolbar { display:flex; }
   }
   #kb-view .ct-card.done:hover .ct-move-done { opacity: 1; pointer-events: auto; }
   #kb-view .ct-move-done:hover { background: #d99e00; }
-  /* カード状況プルダウン(右上) */
+  /* カード状況プルダウン(ヘッダー行・右寄せ) */
   #kb-view .ct-status-select {
-    position: absolute; top: 8px; right: 8px; z-index: 6;
-    font-size: 11px; font-weight: 800; letter-spacing: .5px;
+    position: relative; z-index: 6; max-width: 100%;
+    font-size: 11px; font-weight: 800; letter-spacing: .3px;
     border: 1.5px solid currentColor; border-radius: 999px;
-    padding: 3px 22px 3px 10px; cursor: pointer;
+    padding: 3px 24px 3px 11px; cursor: pointer;
     -webkit-appearance: none; appearance: none;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
-    background-repeat: no-repeat; background-position: right 7px center;
+    background-repeat: no-repeat; background-position: right 8px center;
     transition: background .15s, color .15s, border-color .15s;
   }
   #kb-view .ct-status-select:focus { outline: none; box-shadow: 0 0 0 2px rgba(0,0,0,.12); }
-  /* 状況ごとの色: 進行中=紫 / 完了=金 / キャンセル・審査落ち=グレー */
-  #kb-view .ct-status-select.ss-progress { color: #8e44d8; background-color: #f3ecfb; }
-  #kb-view .ct-status-select.ss-complete { color: #b8860b; background-color: #fff4cc; }
-  #kb-view .ct-status-select.ss-cancel   { color: #6b7280; background-color: #eceef1; }
   /* キャンセル・審査落ちカードはグレーアウト */
   #kb-view .ct-card.status-cancel {
     background: #eceef1 !important; border-color: #b9bfc7 !important;
@@ -7786,6 +7784,8 @@ const ITEM_ICON = {
   trophy: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3a3a3c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 5H4.5a2.5 2.5 0 0 0 2.5 4M17 5h2.5a2.5 2.5 0 0 1-2.5 4"/><path d="M12 13v3M9 20h6M10 16h4l.5 4h-5z"/></svg>'),
   esign: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3a3a3c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h9l4 4v12H5z"/><path d="M13 4v4h4"/><path d="M8 16c2-1 4-3 7-2"/><path d="M14.5 13.5l3-3 1.5 1.5-3 3z"/></svg>'),
   guarantee: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3a3a3c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="5.5"/><path d="M6.5 10h11M12 4.5v11" stroke-width="2"/><rect x="4" y="18" width="16" height="2.2" rx="1" fill="#3a3a3c" stroke="none"/></svg>'),
+  // ひな形送付済み(法人): 書類+送信
+  hinagata: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3a3a3c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h7l4 4v6.5"/><path d="M12 3v4h4"/><path d="M5 3v18h7"/><path d="M8 8.5h3M8 12h3M8 15.5h2"/><path d="M21 17l-6 2.2L17 14z"/><path d="M21 17l-4.5 1.6"/></svg>'),
 };
 
 // アイテム定義(キー, ラベル, 取得判定関数, クリック時のON/OFF値)
@@ -7826,8 +7826,14 @@ const ITEMS = [
     got:v => v==='完了', on:'完了', off:'', note:v => v || '' },
   { key:'keyHandover', label:'鍵渡し',       icon:'keyhand',
     got:v => v==='完了', on:'完了', off:'', note:v => v || '' },
+  { key:'hinagata',    label:'ひな形送付済み', icon:'hinagata',
+    corpOnly:true, got:v => v==='完了', on:'完了', off:'', note:v => v || '' },
 ];
 function itemGot(c, item){ return item.got(c[item.key]); }
+// 法人専用アイテムか(corpOnly)を、契約種別に応じて表示対象とするか判定
+function itemApplies(c, item){ return item.corpOnly ? ((c && c.type) === '法人') : true; }
+// 種別に応じて表示・集計対象になるアイテム一覧
+function applicableItems(c){ return ITEMS.filter(it => itemApplies(c, it)); }
 // 日付記録項目(同じ仕様: クリックで色と日付)
 const DATE_ITEMS = [
   { key:'esignDate',     label:'電子署名',   icon:'esign' },
@@ -8026,22 +8032,23 @@ const BASIC_LABELS = { applyDate:'申込日', type:'種別', contractDate:'契�
 function missingLabels(c){
   const out = [];
   BASIC_KEYS.forEach(k => { if(!basicDone(c, k)) out.push(BASIC_LABELS[k] || k); });
-  ITEMS.forEach(it => {
+  applicableItems(c).forEach(it => {
     if(it.key === 'pet') return;          // ペットは任意
     if(!itemGot(c, it)) out.push(it.label);
   });
   return out;
 }
-// 達成数 / 合計(基本情報7 + 獲得アイテム13 = 20)
+// 達成数 / 合計(基本情報7 + 獲得アイテム ※法人時はひな形送付済みを含む)
 function contractProgress(c){
+  const applicable = applicableItems(c);
   const basic = BASIC_KEYS.filter(k => basicDone(c, k)).length;
-  const items = ITEMS.filter(it => (it.key === 'pet') ? true : itemGot(c, it)).length;
-  return { done: basic + items, total: BASIC_KEYS.length + ITEMS.length };
+  const items = applicable.filter(it => (it.key === 'pet') ? true : itemGot(c, it)).length;
+  return { done: basic + items, total: BASIC_KEYS.length + applicable.length };
 }
 // 全項目完了で「完了」
 function isContractComplete(c){
   if(!basicInfoComplete(c)) return false;
-  for(const it of ITEMS){
+  for(const it of applicableItems(c)){
     if(it.key === 'pet') continue;
     if(!itemGot(c, it)) return false;
   }
@@ -8057,12 +8064,37 @@ function cardStatus(c){
   if(done >= 17) return 'almost';
   return 'progress';
 }
-// カードのプルダウンで選べる状況(3択)
-//  progress=進行中 / complete=完了 / cancel=キャンセル・審査落ち
+// カードのプルダウンで選べる状況(7段階) + 自動表示(ひな形送付済み)
+//  申込/審査中/審査完了/条件確認中/契約書類作成中/契約書類作成完了/キャンセル・審査落ち
+//  ひな形送付済み(hinagata)は法人でアイテム取得時に自動表示(手動選択肢には出さない)
+const DEAL_STATUSES = [
+  { key:'apply',      label:'申込',             color:'#8e8e93', tone:'progress' },
+  { key:'screening',  label:'審査中',           color:'#ff9500', tone:'progress' },
+  { key:'screen_ok',  label:'審査完了',         color:'#34c759', tone:'progress' },
+  { key:'condition',  label:'条件確認中',       color:'#5ac8fa', tone:'progress' },
+  { key:'doc_making', label:'契約書類作成中',   color:'#5856d6', tone:'progress' },
+  { key:'doc_done',   label:'契約書類作成完了', color:'#af52de', tone:'progress' },
+  { key:'cancel',     label:'キャンセル・審査落ち', color:'#9aa1aa', tone:'cancel' },
+];
+// 手動選択肢(プルダウンに出す順)
+const DEAL_MENU = DEAL_STATUSES;
+// 自動状況: ひな形送付済み(法人 + 取得)
+function autoHinagata(c){
+  if(!c || c.type !== '法人') return false;
+  const it = ITEMS.find(x => x.key === 'hinagata');
+  return it ? itemGot(c, it) : false;
+}
+function dealStatusDef(key){ return DEAL_STATUSES.find(s => s.key === key) || null; }
+// プルダウン/カードに表示すべき状況キーを決定
 function dropdownStatus(c){
   if(c && c.dealStatus === 'cancel') return 'cancel';
   if(isContractComplete(c)) return 'complete';
-  return 'progress';
+  if(autoHinagata(c)) return 'hinagata';
+  if(c && c.dealStatus){
+    // 完了相当の手動値は完了扱いにしない(進行中の段階値のみ尊重)
+    if(dealStatusDef(c.dealStatus)) return c.dealStatus;
+  }
+  return 'apply';
 }
 const STATUS_COLOR = { complete:'#f5b400', defect:'#e60012', almost:'#34c759', progress:'#8e44d8', cancel:'#9aa1aa' };
 function progressCurrentIndex(c){
@@ -8147,36 +8179,51 @@ function renderCard(c){
     ? '<button class="ct-move-done" onclick="KB.moveToDone(event,\'' + c.id + '\')">完了タブへ移動 ▸</button>'
     : '';
 
-  // 状況プルダウン(進行中 / 完了 / キャンセル・審査落ち)
+  // 状況プルダウン(7段階) + 自動表示(完了/ひな形送付済み)
   const ddStatus = dropdownStatus(c);
-  const ssClass = ddStatus === 'complete' ? 'ss-complete' : (ddStatus === 'cancel' ? 'ss-cancel' : 'ss-progress');
-  const opt = (val, label) => '<option value="' + val + '"' + (ddStatus === val ? ' selected' : '') + '>' + label + '</option>';
+  // 表示色を決定
+  let ddColor, ddBg, ddLabel, ddIsAuto = false;
+  if(ddStatus === 'complete'){ ddColor = '#b8860b'; ddBg = '#fff4cc'; ddLabel = '完了'; ddIsAuto = true; }
+  else if(ddStatus === 'hinagata'){ ddColor = '#1f8a43'; ddBg = '#e7f7ec'; ddLabel = 'ひな形送付済み'; ddIsAuto = true; }
+  else {
+    const def = dealStatusDef(ddStatus) || DEAL_STATUSES[0];
+    ddColor = def.color; ddBg = hexA(def.color, 0.14); ddLabel = def.label;
+  }
+  // 手動メニュー(7項目)。自動状況(完了/ひな形)のときは現在値を一時的に先頭表示
+  const menuOpts = DEAL_MENU.map(s =>
+    '<option value="' + s.key + '"' + (ddStatus === s.key ? ' selected' : '') + '>' + s.label + '</option>'
+  ).join('');
+  const autoOpt = ddIsAuto
+    ? '<option value="__auto" selected disabled>' + ddLabel + '</option>'
+    : '';
   const statusSelect =
-    '<select class="ct-status-select ' + ssClass + '"' +
+    '<select class="ct-status-select" ' +
+    'style="color:' + ddColor + ';background-color:' + ddBg + ';border-color:' + ddColor + ';"' +
     ' onclick="event.stopPropagation();"' +
     ' onchange="KB.onCardStatusChange(event,\'' + c.id + '\')"' +
     ' title="この契約の状況を切り替えます">' +
-      opt('progress', '進行中') +
-      opt('complete', '完了') +
-      opt('cancel', 'キャンセル・審査落ち') +
+      autoOpt +
+      menuOpts +
     '</select>';
 
   return '<div class="ct-card status-' + status + (isDone ? ' done' : '') + '" data-id="' + c.id + '" draggable="true"' +
     ' style="border-color:' + accent + ';"' +
     ' onclick="KB.onCardClick(event,\'' + c.id + '\')">' +
-    statusSelect +
     '<button class="ct-card-del" title="この契約を削除" onclick="event.stopPropagation();KB.deleteCardContract(event,\'' + c.id + '\')">×</button>' +
-    '<div class="ct-badge" style="background:' + accent + ';">' +
-      '<img src="' + STAGE_ICON[isDone ? 'done' : iconForStep(cur.key)] + '" alt="">' +
-    '</div>' +
-    '<div class="ct-body">' +
-      '<div class="card-title">' + titleLine + '</div>' +
-      '<div class="card-sub"><span class="card-name">' + esc(c.contractor || '(契約者未入力)') + '</span></div>' +
-      cdateHtml(c) +
-      '<div class="ct-progress"><div class="prog-bar">' + segHtml + '</div>' +
-        '<div class="ct-stage-name' + (isDone ? ' done-label' : '') + '" style="color:' + accent + ';">' +
-          statusLabel +
-          ' <span class="ct-stage-count">' + doneCount + '/' + totalCount + '</span>' +
+    '<div class="ct-head">' + statusSelect + '</div>' +
+    '<div class="ct-main">' +
+      '<div class="ct-badge" style="background:' + accent + ';">' +
+        '<img src="' + STAGE_ICON[isDone ? 'done' : iconForStep(cur.key)] + '" alt="">' +
+      '</div>' +
+      '<div class="ct-body">' +
+        '<div class="card-title">' + titleLine + '</div>' +
+        '<div class="card-sub"><span class="card-name">' + esc(c.contractor || '(契約者未入力)') + '</span></div>' +
+        cdateHtml(c) +
+        '<div class="ct-progress"><div class="prog-bar">' + segHtml + '</div>' +
+          '<div class="ct-stage-name' + (isDone ? ' done-label' : '') + '" style="color:' + accent + ';">' +
+            statusLabel +
+            ' <span class="ct-stage-count">' + doneCount + '/' + totalCount + '</span>' +
+          '</div>' +
         '</div>' +
       '</div>' +
     '</div>' +
@@ -8262,8 +8309,8 @@ function onCardStatusChange(event, id){
       toast('「' + (c.property||'契約') + '」をキャンセル・審査落ちにしました');
     }
   } else {
-    // 進行中・完了に戻す → キャンセル指定を解除(進捗の実態で色が決まる)
-    if(c.dealStatus){ delete c.dealStatus; }
+    // 申込〜契約書類作成完了 などの段階を保存
+    c.dealStatus = val;
     saveAll(all);
     renderAll();
   }
@@ -8315,8 +8362,9 @@ function showPreview(id){
     (c.contractDate ? '<span class="pv-tag">契約日 ' + esc(c.contractDate.slice(5).replace('-','/')) + '</span>' : '');
 
   // 獲得アイテム(大きく表示)
-  const gotCount = ITEMS.filter(it => itemGot(c, it)).length;
-  const itemsBig = ITEMS.map(it => {
+  const pvItems = applicableItems(c);
+  const gotCount = pvItems.filter(it => itemGot(c, it)).length;
+  const itemsBig = pvItems.map(it => {
     const got = itemGot(c, it);
     const gotDate = (c.itemDates && c.itemDates[it.key]) ? c.itemDates[it.key].slice(5).replace('-','/') : '';
     return '<div class="pv-item' + (got ? ' got' : '') + '">' +
@@ -8334,7 +8382,7 @@ function showPreview(id){
     '<div class="pv-contractor">' + esc(c.contractor || '(契約者未入力)') + '</div>' +
     (c.broker ? '<div class="pv-broker">🏢 ' + esc(c.broker) + '</div>' : '') +
     '<div class="pv-meta">' + metaHtml + '</div>' +
-    '<div class="pv-section-title">🎒 獲得アイテム (' + gotCount + ' / ' + ITEMS.length + ')</div>' +
+    '<div class="pv-section-title">🎒 獲得アイテム (' + gotCount + ' / ' + pvItems.length + ')</div>' +
     '<div class="pv-items">' + itemsBig + '</div>' +
     '<div class="pv-section-title">ステージ到達履歴</div>' +
     '<div class="pv-stages">' + stagesHtml + '</div>' +
@@ -8658,11 +8706,13 @@ function renderSheetItemSummary(){
   const tmp = {};
   ITEMS.forEach(it => { tmp[it.key] = _editingItemValues[it.key] || ''; });
   tmp.parking = get('f-parking');   // P区画は入力欄から
+  tmp.type = _editingType;          // 法人専用アイテムの表示判定に使う
   // 内部にもP区画値を反映
   _editingItemValues.parking = tmp.parking;
-  const gotCount = ITEMS.filter(it => itemGot(tmp, it)).length;
+  const shownItems = applicableItems(tmp);   // 個人ならひな形を除外
+  const gotCount = shownItems.filter(it => itemGot(tmp, it)).length;
   // フォーム値と取得日を同期(手入力で変えた場合も反映)
-  ITEMS.forEach(it => {
+  shownItems.forEach(it => {
     if(itemGot(tmp, it)){
       if(!_editingItemDates[it.key]) _editingItemDates[it.key] = today();
     } else {
@@ -8737,10 +8787,10 @@ function renderSheetItemSummary(){
     '</div>';
   };
   elc.innerHTML =
-    '<div class="sis-count">' + gotCount + ' / ' + ITEMS.length + ' 取得 ' +
+    '<div class="sis-count">' + gotCount + ' / ' + shownItems.length + ' 取得 ' +
       '<span style="font-weight:500;color:#999;">(アイコンをタップで取得 / もう一度タップで解除)</span></div>' +
     '<div class="dd-grid">' +
-      ITEMS.map(it => itemHtml(it)).join('') +
+      shownItems.map(it => itemHtml(it)).join('') +
     '</div>';
 }
 // 駐車場アイコンのタップ: トグルしない。番号が空なら警告して入力欄へフォーカス
@@ -9007,6 +9057,7 @@ function switchType(type){
   if(lbl) lbl.textContent = isCorp ? '法人名' : '契約者(個人)';
   document.querySelectorAll('.corp-only').forEach(el => el.style.display = isCorp ? 'flex' : 'none');
   if(typeof renderInfoIcons === 'function') renderInfoIcons();
+  if(typeof renderSheetItemSummary === 'function') renderSheetItemSummary();
 }
 function switchWarn(v){
   _editingWarn = v;
