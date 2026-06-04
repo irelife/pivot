@@ -2245,6 +2245,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
         <button class="btn btn-outline btn-sm" onclick="testCloudPing()">🔌 接続テスト</button>
         <button class="btn btn-sm" onclick="cloudSaveAll()" id="cloud-upload-btn">⬆️ 全データをクラウドへ送信</button>
         <button class="btn btn-outline btn-sm" onclick="cloudLoadAll()" id="cloud-download-btn">⬇️ クラウドから読込</button>
+        <button class="btn btn-outline btn-sm" onclick="openLoginHistory()">📜 ログイン履歴を見る</button>
       </div>
       <div id="cloud-log" style="margin-top:14px;font-size:11px;padding:10px;background:#f5f5f5;border:1px solid #ddd;max-height:200px;overflow-y:auto;white-space:pre-wrap;line-height:1.5;display:none;"></div>
       <div style="margin-top:16px;padding:10px;background:#fef9c3;border:1px solid #ca8a04;font-size:12px;line-height:1.7;">
@@ -2284,6 +2285,53 @@ body.tab-kanban .kb-toolbar { display:flex; }
 
 <!-- トースト -->
 <div class="toast" id="toast"></div>
+
+<!-- ログイン履歴モーダル -->
+<div class="modal-overlay" id="login-history-modal">
+  <div class="modal" style="max-width:680px;">
+    <div class="modal-header">
+      <span class="modal-title">📜 ログイン履歴</span>
+      <button class="modal-close" onclick="closeLoginHistory()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <button class="btn btn-outline btn-sm" onclick="openLoginHistory()">🔄 更新</button>
+        <span style="font-size:12px;color:#888;">新しい順に表示しています</span>
+      </div>
+      <div id="login-history-body" style="font-size:13px;max-height:420px;overflow-y:auto;">
+        <div style="color:#666;">読み込み中...</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline btn-sm" onclick="closeLoginHistory()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Firebase 認証(メール+パスワード) ===== -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>
+// PIVOT の Firebase 接続情報(公開前提の情報。秘密ではない)
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBQw442ppH7s_UWxK5cB0AFdojG_A3hjMs",
+  authDomain: "pivot-3e851.firebaseapp.com",
+  projectId: "pivot-3e851",
+  storageBucket: "pivot-3e851.firebasestorage.app",
+  messagingSenderId: "330414645523",
+  appId: "1:330414645523:web:28aac914593105b179fae6"
+};
+// Firebase 初期化(SDKが読み込めていれば実行)
+var _firebaseReady = false;
+try {
+  if (typeof firebase !== 'undefined' && firebase.initializeApp) {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    _firebaseReady = true;
+  }
+} catch (e) {
+  console.error('Firebase初期化に失敗:', e);
+}
+</script>
 
 <script>
 // ==============================
@@ -2647,24 +2695,18 @@ window.addEventListener('visibilitychange', () => {
 });
 
 // ============================================================
-// ★★★ ログインできる人の ID とパスワードの設定 ★★★
+// ★★★ ログイン認証について ★★★
 //
-// 使い方:
-//  ・ここに { id:'ID', pass:'パスワード' } を並べると、その人がログインできます。
-//  ・人を増やすときは、行をコピーして1行追加してください。
-//  ・退職などで消すときは、その人の行を削除してください。
-//  ・IDとパスワードは ' '(シングルクオート)で囲ってください。
-//  ・下記は仮の値です。必ず本番用に書き換えてください。
+// ログインは Firebase Authentication(メール+パスワード)で行います。
+// ログインできる人の追加・削除は、コードではなく
+// Firebaseコンソールの Authentication →「ユーザー」タブで行います。
+//   ・追加: 「ユーザーを追加」でメールアドレスと仮パスワードを登録
+//   ・退職者の締め出し: その人の行の「⋮」→「ユーザーを削除」(または無効化)
 //
-// 注意: これは簡易的なログインです。F12(開発者ツール)を使える人には
-//       見破られる可能性があります。あくまで部外者・退職者が
-//       うっかり入れないようにするための簡易ロックです。
+// 下の LOGIN_ACCOUNTS は旧・簡易ログインの名残で、現在は使用していません
+// (将来の参照エラーを避けるため、空配列として残しています)。
 // ============================================================
-const LOGIN_ACCOUNTS = [
-  { id: 'irelife', pass: 'taki' },
-  { id: 'irelife2', pass: 'nishizawa' },
-  { id: 'irelife3', pass: 'asano' }
-];
+const LOGIN_ACCOUNTS = [];
 // ============================================================
 
 // 現在ログイン中のユーザーID
@@ -2682,13 +2724,89 @@ function updateLoginUserLabel(){
 
 // ログアウト: ログイン中表示を消して、ログイン画面に戻す
 function pivotLogout(){
-  if(!confirm('ログアウトしますか？\nもう一度ID・パスワードの入力が必要になります。')) return;
+  if(!confirm('ログアウトしますか？\nもう一度メールアドレス・パスワードの入力が必要になります。')) return;
   _pivotCurrentUser = '';
   updateLoginUserLabel();
+  // Firebaseからもサインアウト
+  try{ if(_firebaseReady && firebase.auth){ firebase.auth().signOut(); } }catch(e){}
   // ログイン画面を再表示
   if(typeof showLoginScreen === 'function'){ showLoginScreen(); }
 }
 try{ window.pivotLogout = pivotLogout; }catch(e){}
+
+// ===== ログイン履歴(GASスプレッドシートに記録) =====
+// ログイン成功時に「誰が・いつ」をクラウドに1行追記する。
+// 失敗してもログイン自体は妨げない(履歴は補助機能のため)。
+async function recordLoginHistory(email){
+  try{
+    const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
+    if(!url) return;
+    await postToGas(url, {
+      action: 'logLogin',
+      email: email || '',
+      at: new Date().toISOString(),
+      ua: (navigator && navigator.userAgent) ? navigator.userAgent.slice(0, 200) : ''
+    }, 15000);
+  }catch(e){ /* 履歴記録の失敗は無視 */ }
+}
+
+// クラウドからログイン履歴を取得して返す(配列)。新しい順。
+async function fetchLoginHistory(limit){
+  const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
+  if(!url) throw new Error('クラウドURLが未設定です');
+  const r = await postToGas(url, { action:'getLoginHistory', limit: (limit||200) }, 20000);
+  if(!(r && r.ok)) throw new Error((r && r.message) || '履歴取得に失敗しました');
+  return Array.isArray(r.history) ? r.history : [];
+}
+try{ window.fetchLoginHistory = fetchLoginHistory; }catch(e){}
+
+// ログイン履歴モーダルを開いて、履歴を読み込んで表示する
+async function openLoginHistory(){
+  const modal = document.getElementById('login-history-modal');
+  const body = document.getElementById('login-history-body');
+  if(!modal || !body) return;
+  modal.classList.add('active');
+  body.innerHTML = '<div style="color:#666;">読み込み中...</div>';
+  try{
+    const list = await fetchLoginHistory(300);
+    if(!list.length){
+      body.innerHTML = '<div style="color:#888;">まだログイン履歴がありません。</div>';
+      return;
+    }
+    // 日時を見やすく整形
+    const fmt = (iso) => {
+      try{
+        const d = new Date(iso);
+        if(isNaN(d.getTime())) return iso || '';
+        const p = (n) => String(n).padStart(2,'0');
+        return d.getFullYear() + '/' + p(d.getMonth()+1) + '/' + p(d.getDate()) +
+               ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+      }catch(e){ return iso || ''; }
+    };
+    let html = '<table style="width:100%;border-collapse:collapse;">';
+    html += '<thead><tr style="border-bottom:2px solid #ddd;text-align:left;">' +
+            '<th style="padding:8px 6px;white-space:nowrap;">日時</th>' +
+            '<th style="padding:8px 6px;">メールアドレス</th></tr></thead><tbody>';
+    list.forEach((row) => {
+      const at = fmt(row.at || row.time || '');
+      const email = (row.email || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      html += '<tr style="border-bottom:1px solid #eee;">' +
+              '<td style="padding:8px 6px;white-space:nowrap;color:#444;">' + at + '</td>' +
+              '<td style="padding:8px 6px;">' + email + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+  }catch(e){
+    body.innerHTML = '<div style="color:#d33;">履歴の取得に失敗しました。<br>' +
+      (e && e.message ? e.message : '') +
+      '<br><br>GAS側に履歴記録の処理が追加されているか確認してください。</div>';
+  }
+}
+function closeLoginHistory(){
+  const modal = document.getElementById('login-history-modal');
+  if(modal){ modal.classList.remove('active'); }
+}
+try{ window.openLoginHistory = openLoginHistory; window.closeLoginHistory = closeLoginHistory; }catch(e){}
 
 // ===== ログイン画面(=クラウドから最新を読み込ませる強制ステップ) =====
 function showLoginScreen(){
@@ -2703,41 +2821,102 @@ function showLoginScreen(){
     '<div style="text-align:center;padding:40px 32px;max-width:340px;width:90%;">' +
       '<div style="font-size:46px;font-weight:900;letter-spacing:2px;color:#111;margin-bottom:6px;">PIVOT</div>' +
       '<div style="font-size:13px;color:#888;margin-bottom:28px;">物件・契約 管理</div>' +
-      '<input id="pivot-login-id" type="text" autocomplete="username" placeholder="ID" style="width:100%;padding:13px 14px;border:1.5px solid #d8d8dc;border-radius:12px;font-size:15px;margin-bottom:10px;font-family:inherit;box-sizing:border-box;">' +
+      '<input id="pivot-login-id" type="email" autocomplete="username" placeholder="メールアドレス" style="width:100%;padding:13px 14px;border:1.5px solid #d8d8dc;border-radius:12px;font-size:15px;margin-bottom:10px;font-family:inherit;box-sizing:border-box;">' +
       '<input id="pivot-login-pass" type="password" autocomplete="current-password" placeholder="パスワード" style="width:100%;padding:13px 14px;border:1.5px solid #d8d8dc;border-radius:12px;font-size:15px;margin-bottom:18px;font-family:inherit;box-sizing:border-box;">' +
       '<button id="pivot-login-btn" style="width:100%;padding:16px;border:none;border-radius:14px;background:#111;color:#fff;font-size:17px;font-weight:800;cursor:pointer;font-family:inherit;">ログイン</button>' +
       '<div id="pivot-login-msg" style="font-size:12px;color:#999;margin-top:16px;min-height:18px;"></div>' +
+      '<div style="margin-top:14px;"><a id="pivot-login-reset" href="#" style="font-size:12px;color:#3367d6;text-decoration:none;">パスワードを忘れた方はこちら</a></div>' +
     '</div>';
   document.body.appendChild(ov);
   const msg = ov.querySelector('#pivot-login-msg');
   const btn = ov.querySelector('#pivot-login-btn');
   const idInput = ov.querySelector('#pivot-login-id');
   const passInput = ov.querySelector('#pivot-login-pass');
+  const resetLink = ov.querySelector('#pivot-login-reset');
+
+  // Firebaseが読み込めていない場合の保険
+  if(!_firebaseReady || typeof firebase === 'undefined' || !firebase.auth){
+    msg.style.color = '#d33';
+    msg.textContent = '認証システムの読み込みに失敗しました。通信環境を確認し、ページを再読み込みしてください。';
+    btn.disabled = true; btn.style.opacity = '0.6';
+    return;
+  }
+
+  // Firebaseのエラーコードを日本語の分かりやすい文に変換
+  const firebaseErrText = (code) => {
+    switch(code){
+      case 'auth/invalid-email': return 'メールアドレスの形式が正しくありません。';
+      case 'auth/user-disabled': return 'このアカウントは無効化されています。管理者にお問い合わせください。';
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential': return 'メールアドレスまたはパスワードが正しくありません。';
+      case 'auth/too-many-requests': return '試行回数が多すぎます。しばらく待ってから、もう一度お試しください。';
+      case 'auth/network-request-failed': return '通信に失敗しました。ネット接続を確認してください。';
+      default: return 'ログインに失敗しました。(' + code + ')';
+    }
+  };
+
   const doLogin = async () => {
-    const id = (idInput.value || '').trim();
+    const email = (idInput.value || '').trim();
     const pass = passInput.value || '';
-    // ID・パスワードの照合
-    const ok = Array.isArray(LOGIN_ACCOUNTS) && LOGIN_ACCOUNTS.some(a => a.id === id && a.pass === pass);
-    if(!ok){
+    if(!email || !pass){
       msg.style.color = '#d33';
-      msg.textContent = 'IDまたはパスワードが正しくありません。';
+      msg.textContent = 'メールアドレスとパスワードを入力してください。';
       return;
     }
     msg.style.color = '#999';
-    btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = '読み込み中…';
-    msg.textContent = 'クラウドから最新データを取得しています…';
+    btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = '確認中…';
+    msg.textContent = 'ログインを確認しています…';
     try{
+      // Firebaseでメール+パスワード認証
+      const cred = await firebase.auth().signInWithEmailAndPassword(email, pass);
+      const loggedInEmail = (cred && cred.user && cred.user.email) ? cred.user.email : email;
+      // ログイン履歴を記録(失敗してもログインは続行)
+      try{ recordLoginHistory(loggedInEmail); }catch(e){}
+      btn.textContent = '読み込み中…';
+      msg.textContent = 'クラウドから最新データを取得しています…';
       await loginPull();
       msg.textContent = '完了しました';
-      // ログインした人のIDを記録して、画面に表示
-      try{ _pivotCurrentUser = id; updateLoginUserLabel(); }catch(e){}
+      try{ _pivotCurrentUser = loggedInEmail; updateLoginUserLabel(); }catch(e){}
       ov.remove();
     }catch(e){
-      msg.textContent = '取得に失敗しました。通信を確認して、もう一度お試しください。';
+      const code = (e && e.code) ? e.code : '';
+      if(code){
+        msg.style.color = '#d33';
+        msg.textContent = firebaseErrText(code);
+      } else {
+        msg.style.color = '#d33';
+        msg.textContent = 'データ取得に失敗しました。通信を確認して、もう一度お試しください。';
+      }
       btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'ログイン';
     }
   };
+
+  // パスワード再設定メールの送信
+  const doReset = async () => {
+    const email = (idInput.value || '').trim();
+    if(!email){
+      msg.style.color = '#d33';
+      msg.textContent = '上のメールアドレス欄に、登録済みのアドレスを入力してから押してください。';
+      idInput.focus();
+      return;
+    }
+    if(!confirm(email + ' 宛に、パスワード再設定メールを送ります。よろしいですか？')) return;
+    msg.style.color = '#999';
+    msg.textContent = 'メールを送信しています…';
+    try{
+      await firebase.auth().sendPasswordResetEmail(email);
+      msg.style.color = '#2a8a3e';
+      msg.textContent = '再設定メールを送りました。受信トレイ(迷惑メールも)をご確認ください。';
+    }catch(e){
+      const code = (e && e.code) ? e.code : '';
+      msg.style.color = '#d33';
+      msg.textContent = firebaseErrText(code);
+    }
+  };
+
   btn.onclick = doLogin;
+  resetLink.onclick = (e) => { e.preventDefault(); doReset(); };
   // パスワード欄でEnterキーでもログイン
   passInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ doLogin(); } });
   idInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ passInput.focus(); } });
