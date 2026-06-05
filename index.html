@@ -2328,7 +2328,7 @@ try {
     firebase.initializeApp(FIREBASE_CONFIG);
     _firebaseReady = true;
     // ログイン状態をブラウザに保持(次回からメアド/パス入力不要)
-    try { firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch(e){}
+    try { firebase.auth().setPersistence(firebase.auth.Auth.Persistence.NONE); } catch(e){}
   }
 } catch (e) {
   console.error('Firebase初期化に失敗:', e);
@@ -2687,31 +2687,9 @@ async function autoPullOnStart(){
     setSyncStatus('error', '⚠️ 取得失敗(通信)');
   }
 }
-// 起動時: すでにログイン済み(記憶あり)ならログイン画面を出さずに自動で最新を読み込む。
-// 未ログインならログイン画面を表示する。
-function pivotBootAuth(){
-  const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
-  if(!url){ return; } // クラウド未設定ならローカル運用(ログイン不要)
-  if(!_firebaseReady || typeof firebase === 'undefined' || !firebase.auth){
-    // Firebaseが使えない時は従来どおりログイン画面
-    showLoginScreen();
-    return;
-  }
-  // 認証状態の復元を待つ。ログイン記憶があればuserが入る。
-  let handled = false;
-  firebase.auth().onAuthStateChanged(async (user) => {
-    if(handled) return; handled = true;
-    if(user && user.email){
-      // すでにログイン済み: 画面を出さず自動で最新データを読み込む
-      try{ _pivotCurrentUser = user.email; if(typeof updateLoginUserLabel==='function') updateLoginUserLabel(); }catch(e){}
-      try{ if(typeof loginPull === 'function'){ await loginPull(); } }catch(e){}
-    } else {
-      // 未ログイン: ログイン画面を表示
-      showLoginScreen();
-    }
-  });
-}
-window.addEventListener('DOMContentLoaded', () => { setTimeout(pivotBootAuth, 200); });
+// 起動時は常にログイン画面を表示(セキュリティのため毎回パスワード入力)。
+// メールアドレスだけ前回のものを自動入力して手間を減らす。
+window.addEventListener('DOMContentLoaded', () => { setTimeout(showLoginScreen, 200); });
 window.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'hidden'){
     if(_autoPushTimer){ clearTimeout(_autoPushTimer); _autoPushTimer = null; }
@@ -2856,6 +2834,8 @@ function showLoginScreen(){
   const msg = ov.querySelector('#pivot-login-msg');
   const btn = ov.querySelector('#pivot-login-btn');
   const idInput = ov.querySelector('#pivot-login-id');
+  // 前回のメールアドレスを自動入力(手間軽減。パスワードは毎回入力)
+  try{ var _lastEmail = localStorage.getItem('pivot_last_email'); if(_lastEmail){ idInput.value = _lastEmail; } }catch(e){}
   const passInput = ov.querySelector('#pivot-login-pass');
   const resetLink = ov.querySelector('#pivot-login-reset');
 
@@ -2896,6 +2876,7 @@ function showLoginScreen(){
       // Firebaseでメール+パスワード認証
       const cred = await firebase.auth().signInWithEmailAndPassword(email, pass);
       const loggedInEmail = (cred && cred.user && cred.user.email) ? cred.user.email : email;
+      try{ localStorage.setItem('pivot_last_email', loggedInEmail); }catch(e){}
       // ログイン履歴を記録(失敗してもログインは続行)
       try{ recordLoginHistory(loggedInEmail); }catch(e){}
       btn.textContent = '読み込み中…';
@@ -2945,6 +2926,8 @@ function showLoginScreen(){
   // パスワード欄でEnterキーでもログイン
   passInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ doLogin(); } });
   idInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ passInput.focus(); } });
+  // メアドが自動入力済みなら、パスワード欄にカーソルを移してすぐ入力できるように
+  try{ setTimeout(function(){ if(idInput.value){ passInput.focus(); } else { idInput.focus(); } }, 100); }catch(e){}
 }
 
 // ログイン時のクラウド読込(クラウドのデータでローカルを置き換える)
