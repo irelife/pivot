@@ -783,20 +783,18 @@ body.tab-kanban .kb-toolbar { display:flex; }
   /* ===== 契約一覧(画面幅に入るだけ並べ、入らなければ下段へ。カード最低260px) ===== */
   #kb-view .contract-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 18px; padding: 10px 4px 20px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px; padding: 10px 4px 20px;
     width: 100%; flex: 1 1 100%;
   }
   #kb-view .empty-grid { padding: 60px 20px; text-align: center; color: #9aa0a6; font-size: 14px; }
   #kb-view .autosave-note { margin-left: auto; margin-right: 12px; font-size: 12px; color: #34c759; font-weight: 700; }
   #kb-view .ct-card {
-    display: flex; flex-direction: column; gap: 8px; align-items: stretch; position: relative;
-    background: #fff; border: 2px solid #d8d8dc; border-radius: 18px;
-    padding: 16px 20px 18px; cursor: pointer;
+    display: flex; gap: 12px; align-items: flex-start; position: relative;
+    background: #fff; border: 2px solid #d8d8dc; border-radius: 16px;
+    padding: 14px 16px; cursor: pointer;
     transition: transform 0.12s, box-shadow 0.12s;
   }
-  #kb-view .ct-head { display: flex; justify-content: flex-end; align-items: center; min-height: 34px; }
-  #kb-view .ct-main { display: flex; gap: 12px; align-items: flex-start; }
   #kb-view .ct-card { cursor: pointer; }
   /* 状態別の薄い背景: 不備=薄赤 → 進行中=薄紫 → もうすぐ=薄緑 → 完了=薄黄 */
   #kb-view .ct-card.status-defect   { background: #ffe9e9; }
@@ -810,7 +808,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #kb-view .ct-card .ct-body, #kb-view .ct-card .ct-badge { position: relative; z-index: 2; }
   /* カード右上の削除ボタン */
   #kb-view .ct-card-del {
-    position: absolute; top: 6px; left: 6px; z-index: 7;
+    position: absolute; top: 6px; right: 6px; z-index: 5;
     width: 22px; height: 22px; border-radius: 50%;
     border: none; background: rgba(0,0,0,0.18); color: #fff;
     font-size: 15px; line-height: 1; cursor: pointer; padding: 0;
@@ -840,78 +838,42 @@ body.tab-kanban .kb-toolbar { display:flex; }
     animation: none;       /* ホバー中は揺れを止めて操作しやすく */
     transform: translateY(-3px);
   }
-  /* カード下部のアクション行(申込に戻す / 完了タブへ移動) */
-  #kb-view .ct-actions {
-    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
-    margin-top: 10px;
-  }
+  /* 完了タブへ移動ボタン(完了カードにホバーで表示) */
   #kb-view .ct-move-done {
+    position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
     background: #f5b400; color: #3a2c00; border: none; border-radius: 999px;
-    padding: 8px 16px; font-size: 12px; font-weight: 800; cursor: pointer;
-    white-space: nowrap; box-shadow: 0 3px 10px rgba(245,180,0,0.4); z-index: 5;
+    padding: 7px 16px; font-size: 12px; font-weight: 800; cursor: pointer;
+    opacity: 0; pointer-events: none; transition: opacity 0.15s; white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(245,180,0,0.45); z-index: 5;
   }
+  #kb-view .ct-card.done:hover .ct-move-done { opacity: 1; pointer-events: auto; }
   #kb-view .ct-move-done:hover { background: #d99e00; }
-  /* グレー(キャンセル・審査落ち)カード用の移動ボタン */
-  #kb-view .ct-move-done-gray { background: #6b7280; color: #fff; box-shadow: 0 3px 10px rgba(107,114,128,0.4); }
-  #kb-view .ct-move-done-gray:hover { background: #565d66; }
-  /* 申込に戻す(復活)ボタン */
-  #kb-view .ct-revert {
-    background: #fff; color: #5b6b7b; border: 1.5px solid #b9bfc7; border-radius: 999px;
-    padding: 8px 16px; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap;
-  }
-  #kb-view .ct-revert:hover { background: #eef0f3; color: #1c1c1e; }
-  /* カード状況プルダウン(ヘッダー行・右寄せ) */
-  #kb-view .ct-status-select {
-    position: relative; z-index: 6; max-width: 100%;
-    font-size: 15px; font-weight: 800; letter-spacing: .3px;
-    border: 2px solid currentColor; border-radius: 999px;
-    padding: 6px 34px 6px 15px; cursor: pointer;
-    -webkit-appearance: none; appearance: none;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
-    background-repeat: no-repeat; background-position: right 11px center;
-    transition: background .15s, color .15s, border-color .15s;
-  }
-  #kb-view .ct-status-select:focus { outline: none; box-shadow: 0 0 0 2px rgba(0,0,0,.12); }
-  /* キャンセル・審査落ちカードはグレーアウト */
-  #kb-view .ct-card.status-cancel {
-    background: #eceef1 !important; border-color: #b9bfc7 !important;
-    filter: grayscale(1); opacity: .88;
-    animation: none !important; box-shadow: none !important;
-  }
-  #kb-view .ct-card.status-cancel .ct-badge { background: #9aa1aa !important; }
-  #kb-view .ct-card.status-cancel .ct-stage-name { color: #6b7280 !important; }
   #kb-view .ct-badge {
-    flex: 0 0 auto; width: 50px; height: 50px; border-radius: 14px;
+    flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px;
     display: flex; align-items: center; justify-content: center;
   }
-  #kb-view .ct-badge img { width: 28px; height: 28px; }
+  #kb-view .ct-badge img { width: 24px; height: 24px; }
   #kb-view .ct-body { flex: 1; min-width: 0; }
-  #kb-view .ct-body .card-title { display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline; font-size: 19px; font-weight: 800; color: #1c1c1e; margin-bottom: 3px; }
-  #kb-view .ct-body .t-room, #kb-view .ct-body .t-park { font-size: 16px; font-weight: 700; color: #5b6b7b; }
-  #kb-view .ct-body .card-sub { font-size: 14px; color: #6b6b70; margin-bottom: 8px; }
-  #kb-view .ct-memo {
-    margin-top: 8px; padding: 8px 11px; border-radius: 8px;
-    background: #fffaf0; border: 1px solid #f0e4c8;
-    font-size: 13px; line-height: 1.55; color: #6b5e3a;
-    white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
-  }
+  #kb-view .ct-body .card-title { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; font-size: 15px; font-weight: 800; color: #1c1c1e; margin-bottom: 2px; }
+  #kb-view .ct-body .t-room, #kb-view .ct-body .t-park { font-size: 13px; font-weight: 700; color: #5b6b7b; }
+  #kb-view .ct-body .card-sub { font-size: 12px; color: #6b6b70; margin-bottom: 8px; }
   #kb-view .ct-progress { margin-top: 4px; }
-  #kb-view .prog-bar { display: flex; gap: 3px; margin-bottom: 5px; }
-  #kb-view .prog-seg { flex: 1; height: 7px; border-radius: 3px; background: #e6e6ea; transition: background 0.15s; }
-  #kb-view .ct-stage-name { font-size: 14px; font-weight: 800; }
+  #kb-view .prog-bar { display: flex; gap: 3px; margin-bottom: 4px; }
+  #kb-view .prog-seg { flex: 1; height: 6px; border-radius: 3px; background: #e6e6ea; transition: background 0.15s; }
+  #kb-view .ct-stage-name { font-size: 12px; font-weight: 800; }
   /* 完了カードの「完了」を大きく */
-  #kb-view .ct-stage-name.done-label { font-size: 28px; font-weight: 900; letter-spacing: 1px; }
-  #kb-view .ct-stage-name.done-label .ct-stage-count { font-size: 13px; letter-spacing: 0; }
+  #kb-view .ct-stage-name.done-label { font-size: 26px; font-weight: 900; letter-spacing: 1px; }
+  #kb-view .ct-stage-name.done-label .ct-stage-count { font-size: 12px; letter-spacing: 0; }
   #kb-view .ct-stage-date { font-weight: 700; opacity: 0.85; }
-  #kb-view .ct-stage-count { color: #6b7077; font-weight: 800; font-size: 17px; margin-left: 6px; }
+  #kb-view .ct-stage-count { color: #6b7077; font-weight: 800; font-size: 15px; margin-left: 6px; }
   /* 不備カードのカウントは大きく目立たせる */
-  #kb-view .ct-card.status-defect .ct-stage-name { font-size: 16px; }
-  #kb-view .ct-card.status-defect .ct-stage-count { font-size: 20px; color: #c0392b; font-weight: 900; margin-left: 7px; }
+  #kb-view .ct-card.status-defect .ct-stage-name { font-size: 14px; }
+  #kb-view .ct-card.status-defect .ct-stage-count { font-size: 18px; color: #c0392b; font-weight: 900; margin-left: 7px; }
   /* 契約確定日の大きな表示 */
-  #kb-view .ct-cdate { display: flex; align-items: baseline; gap: 5px; margin: 2px 0 6px; }
-  #kb-view .ct-cdate .cd-label { font-size: 11px; font-weight: 700; color: #8a8a8f; }
-  #kb-view .ct-cdate .cd-value { font-size: 26px; font-weight: 900; color: #1c1c1e; letter-spacing: 0.5px; line-height: 1; }
-  #kb-view .ct-cdate .cd-md { font-size: 16px; font-weight: 800; color: #5b6b7b; }
+  #kb-view .ct-cdate { display: flex; align-items: baseline; gap: 4px; margin: 2px 0 6px; }
+  #kb-view .ct-cdate .cd-label { font-size: 10px; font-weight: 700; color: #8a8a8f; }
+  #kb-view .ct-cdate .cd-value { font-size: 22px; font-weight: 900; color: #1c1c1e; letter-spacing: 0.5px; line-height: 1; }
+  #kb-view .ct-cdate .cd-md { font-size: 14px; font-weight: 800; color: #5b6b7b; }
   /* すごろくマップ風: ステージノードを蛇行配置 */
   #kb-view .board {
     display: flex; flex-wrap: wrap; gap: 22px 26px; align-content: flex-start;
@@ -1061,15 +1023,6 @@ body.tab-kanban .kb-toolbar { display:flex; }
   }
   /* 編集シート内アイテムサマリー */
   #kb-view .sheet-item-summary { margin: 4px 0 12px; }
-  #kb-view .sheet-memo {
-    width: 100%; box-sizing: border-box; resize: vertical; min-height: 84px;
-    border: 1.5px solid #d8d8dc; border-radius: 12px; padding: 11px 13px;
-    font-family: inherit; font-size: 14px; line-height: 1.6; color: #1c1c1e;
-    background: #fff; transition: border-color .15s, box-shadow .15s;
-  }
-  #kb-view .sheet-memo::placeholder { color: #aab0b8; }
-  #kb-view .sheet-memo:focus { outline: none; border-color: #8e44d8; box-shadow: 0 0 0 3px rgba(142,68,216,.12); }
-  #kb-view .pv-memo { background: #f7f5fb; border: 1px solid #e3dcf0; border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.6; color: #3a3a3c; white-space: pre-wrap; word-break: break-word; }
   #kb-view .sis-count { font-size: 12px; font-weight: 700; color: #b8860b; margin-bottom: 6px; }
   #kb-view .sis-icons { display: flex; gap: 10px; flex-wrap: wrap; }
   #kb-view .sis-item {
@@ -1462,8 +1415,6 @@ body.tab-kanban .kb-toolbar { display:flex; }
     #kb-view .ct-body { min-width: 0; flex: 1 1 auto; }
     #kb-view .ct-body .card-title { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
     #kb-view .ct-body .card-sub { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
-    #kb-view .ct-status-select { font-size: 13px; padding: 5px 30px 5px 13px; background-position: right 10px center; }
-    #kb-view .ct-head { min-height: 30px; }
   }
   /* ===== 完了お祝い演出(body直下に出すため #kb-view で限定しない) ===== */
   .celebrate-overlay {
@@ -1634,7 +1585,6 @@ body.tab-kanban .kb-toolbar { display:flex; }
         <input type="text" id="f-room">
         <input type="text" id="f-parking" oninput="KB.renderSheetItemSummary()">
         <input type="text" id="f-contractor">
-        <input type="text" id="f-carContractor">
         <input type="text" id="f-corpRep">
         <input type="text" id="f-corpDept">
         <input type="text" id="f-agent">
@@ -1661,13 +1611,6 @@ body.tab-kanban .kb-toolbar { display:flex; }
     <div class="sheet-section">
       <h3>🎒 獲得アイテム</h3>
       <div id="sheet-item-summary" class="sheet-item-summary"></div>
-    </div>
-
-    <div class="sheet-section">
-      <h3>📝 備考（メモ）</h3>
-      <textarea id="f-memo" class="sheet-memo" rows="4"
-        placeholder="自由にメモを入力できます（例: 入居予定日、連絡事項、特記事項 など）"
-        oninput="autoSave()"></textarea>
     </div>
   </div>
   <div class="sheet-footer">
@@ -2384,6 +2327,8 @@ try {
   if (typeof firebase !== 'undefined' && firebase.initializeApp) {
     firebase.initializeApp(FIREBASE_CONFIG);
     _firebaseReady = true;
+    // ログイン状態をブラウザに保持(次回からメアド/パス入力不要)
+    try { firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch(e){}
   }
 } catch (e) {
   console.error('Firebase初期化に失敗:', e);
@@ -2742,8 +2687,31 @@ async function autoPullOnStart(){
     setSyncStatus('error', '⚠️ 取得失敗(通信)');
   }
 }
-// 起動時は自動で読み込まない。ログイン画面を出し、「ログイン」を押したときだけ最新を読み込む。
-window.addEventListener('DOMContentLoaded', () => { setTimeout(showLoginScreen, 200); });
+// 起動時: すでにログイン済み(記憶あり)ならログイン画面を出さずに自動で最新を読み込む。
+// 未ログインならログイン画面を表示する。
+function pivotBootAuth(){
+  const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
+  if(!url){ return; } // クラウド未設定ならローカル運用(ログイン不要)
+  if(!_firebaseReady || typeof firebase === 'undefined' || !firebase.auth){
+    // Firebaseが使えない時は従来どおりログイン画面
+    showLoginScreen();
+    return;
+  }
+  // 認証状態の復元を待つ。ログイン記憶があればuserが入る。
+  let handled = false;
+  firebase.auth().onAuthStateChanged(async (user) => {
+    if(handled) return; handled = true;
+    if(user && user.email){
+      // すでにログイン済み: 画面を出さず自動で最新データを読み込む
+      try{ _pivotCurrentUser = user.email; if(typeof updateLoginUserLabel==='function') updateLoginUserLabel(); }catch(e){}
+      try{ if(typeof loginPull === 'function'){ await loginPull(); } }catch(e){}
+    } else {
+      // 未ログイン: ログイン画面を表示
+      showLoginScreen();
+    }
+  });
+}
+window.addEventListener('DOMContentLoaded', () => { setTimeout(pivotBootAuth, 200); });
 window.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'hidden'){
     if(_autoPushTimer){ clearTimeout(_autoPushTimer); _autoPushTimer = null; }
@@ -3776,13 +3744,21 @@ function openKeiyakuModal(spotIdx){
   document.getElementById('ky-tax-rate').value = '10';
   // 賃借人:区画の使用者を初期値に
   document.getElementById('ky-user-name').value = spot.user || '';
-  document.getElementById('ky-user-addr').value = bld.addr || '';
+  // 借主住所: 物件住所の末尾に「物件名 号室」を追記
+  // (号室は区画の号室があれば使用。棟があれば棟も付ける)
+  var _addr = bld.addr || '';
+  var _suffix = bld.name ? (' ' + bld.name) : '';
+  var _rm = (spot.room || spot.res_room || '');
+  var _to = (spot.tou || spot.res_tou || '');
+  if(_to) _suffix += ' ' + _to + '棟';
+  if(_rm) _suffix += ' ' + _rm + '号';
+  document.getElementById('ky-user-addr').value = (_addr + _suffix).trim();
   // 契約日:今日、期間:今日〜2年後
   const today = new Date();
   const isoDate = (d) => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   document.getElementById('ky-contract-date').value = isoDate(today);
   document.getElementById('ky-period-from').value = isoDate(today);
-  const to = new Date(today); to.setFullYear(to.getFullYear()+2);
+  const to = new Date(today); to.setFullYear(to.getFullYear()+2); to.setDate(to.getDate()-1);
   document.getElementById('ky-period-to').value = isoDate(to);
   document.getElementById('keiyaku-modal').classList.add('active');
 }
@@ -3799,6 +3775,7 @@ function onKeiyakuPeriodFromChange(){
   const d = new Date(fromVal);
   if(isNaN(d.getTime())) return;
   d.setFullYear(d.getFullYear()+2);
+  d.setDate(d.getDate()-1);
   const iso = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   document.getElementById('ky-period-to').value = iso;
 }
@@ -4754,11 +4731,13 @@ function showUnsavedDialog(){
 function goToTop(){
   closeModal();
   if(document.getElementById('modal') && document.getElementById('modal').classList.contains('active')){ return; }
+  // 契約管理タブを開いている場合は、物件管理タブへ戻す(switchApp側で最新取得が走る)
   if(document.body.classList.contains('tab-kanban')){
     if(typeof switchApp === 'function'){ switchApp('pivot'); }
+  } else {
+    // 物件管理タブにいるときは、ここで最新を取り込む(未保存時のみ確認)
+    try{ if(typeof window.forcePullLatest === 'function'){ window.forcePullLatest(); } }catch(e){}
   }
-  // ※ クラウド取り込み(上書き)はここでは行わない(入力直後のデータが戻る不具合を防止)。
-  //   最新化が必要なときは設定メニューの「クラウドから読込」を使用。
   window.scrollTo(0, 0);
 }
 
@@ -4825,23 +4804,16 @@ function linkReservationToSpot(info){
   }
   // すべての対象区画が「同じ契約・同じ予約者・同じ予約日」で既に紐づけ済みなら何もしない。
   // (予約日=契約日が変わっている場合は、下の確認ダイアログで上書きできるようにする)
-  // 日付は表記ゆれ(2026/06/25 と 2026-06-25 など)を吸収して比較する。
-  const nd = (v) => (typeof normalizeDate === 'function') ? (normalizeDate(v) || String(v||'').trim()) : String(v||'').trim();
-  const wantDate = nd(info.contractDate);
-  // 既に「この契約」または「同じ予約者名」でこの区画に予約が入っているかを判定する。
-  // res_srcKey が(同期等で)失われていても、予約者名が一致すれば「紐づけ済み」とみなす。
-  const sameLink = (t) => {
-    const bySrc  = !!(info.srcKey && t.res_srcKey && t.res_srcKey === info.srcKey);
-    const byName = !!(t.res_user && info.contractor && t.res_user === info.contractor);
-    return bySrc || byName;
-  };
-  // すべての対象区画が「同じ予約・同じ予約日」で既に入っていれば、変更なし扱いで拒否。
-  const allSameAlready = targets.every(t => sameLink(t) && nd(t.res_date) === wantDate);
+  const allSameAlready = targets.every(t =>
+    info.srcKey && t.res_srcKey === info.srcKey
+    && t.res_user && t.res_user === info.contractor
+    && t.res_date === info.contractDate);
   if(allSameAlready){
     return { ok:false, reason:'already', msg:'この契約はすでに同じ内容でこの区画へ紐づけ済みです。' };
   }
-  // 同じ予約だが内容(予約日など)が違う → 上書き確認
-  const isReLink = targets.some(t => sameLink(t));
+  // 同じ契約で紐づけ済みだが、内容(契約日など)が変わっている場合の上書き確認用フラグ
+  const isReLink = targets.some(t =>
+    info.srcKey && t.res_srcKey === info.srcKey && t.res_user === info.contractor);
   // 確認ダイアログ: 対象区画の現状を見せる
   const noLabel = targets.map(t => 'P' + String(t.no).padStart(2,'0')).join('・');
   const existingResList = targets
@@ -4855,43 +4827,15 @@ function linkReservationToSpot(info){
     (STATUS_LABELS[t.status] || t.status || '空き')).join('\n');
   const missingNote = missing.length
     ? ('\n(見つからない区画: ' + missing.join('・') + ' は対象外)') : '';
-  // 上書き時、既存の予約日が違っていれば「変更前→変更後」を見せる(6/24→6/25 等の修正が分かるように)
-  const dateChangeNotes = targets
-    .filter(t => sameLink(t) && nd(t.res_date) !== wantDate)
-    .map(t => 'P'+String(t.no).padStart(2,'0')+': 予約日 ' + (t.res_date || '(未設定)') + ' → ' + (nd(info.contractDate) || info.contractDate));
-  const dateChange = dateChangeNotes.length
-    ? ('\n\n■ 予約日の変更:\n' + dateChangeNotes.join('\n')) : '';
-  // ★ 別の予約者が既に入っている区画への上書き警告(誤入力対策)
-  const otherResList = targets
-    .filter(t => t.res_user && t.res_user !== info.contractor)
-    .map(t => 'P'+String(t.no).padStart(2,'0')+'「'+t.res_user+'」' + (t.res_date ? '(予約日 ' + t.res_date + ')' : ''));
-  const overwriteWarn = otherResList.length
-    ? ('⚠️ すでに別の予約が入っています。\n間違いありませんか?\n続行すると、下記の前の予約は上書きされ削除されます:\n' + otherResList.join('\n') + '\n\n')
-    : '';
-  const msg = overwriteWarn +
-    (isReLink ? '【すでに紐づけ済み — 上書き確認】\n\nこの契約はすでにこの区画へ紐づけられています。\n内容に変更があります。新しい内容で上書きしますか?' + dateChange + '\n\n' : '【予約として紐づけ確認】\n\n') +
+  const msg = (isReLink ? '【すでに紐づけ済み — 上書き確認】\n\nこの契約はすでにこの区画へ紐づけられています。\n新しい内容で上書きしますか?(契約日の変更などを反映します)\n\n' : '【予約として紐づけ確認】\n\n') +
     '物件: ' + bldName + '\n' +
     '区画: ' + noLabel + (targets.length>1 ? '(' + targets.length + '区画同時)' : '') + '\n' +
     '予約者: ' + info.contractor + '\n' +
     '予約日(契約確定日): ' + info.contractDate + '\n\n' +
     '現在の状況:\n' + curStates + '\n\n' +
     'これらの区画の予約欄に上記を「予約中」として書き込みます。\n' +
-    '(現在の使用者・状況は変更しません)' + missingNote + '\n\nよろしいですか?';
-  // silent(復活など)でも、別の予約者を上書きする場合だけは確認する
-  if(info.silent){
-    if(overwriteWarn && !confirm(overwriteWarn + 'この区画に予約を復活します。よろしいですか?')){
-      return { ok:false, reason:'cancelled' };
-    }
-  } else {
-    if(!confirm(msg)){ return { ok:false, reason:'cancelled' }; }
-  }
-  // ★ 別の予約者を上書きする場合は、読み飛ばし防止のため もう一度だけ念押し確認する(計2回)
-  if(overwriteWarn){
-    const others = otherResList.join('\n');
-    if(!confirm('【重要・再確認】\n選んだ区画には、すでに別の予約が入っています:\n' + others + '\n\nこのまま進めると、上記の予約は完全に削除され、元に戻せません。\n区画番号の入力ミスではありませんか?\n上書きしてよければ「OK」を押してください。')){
-      return { ok:false, reason:'cancelled' };
-    }
-  }
+    '(現在の使用者・状況は変更しません)' + existingRes + missingNote + '\n\nよろしいですか?';
+  if(!confirm(msg)){ return { ok:false, reason:'cancelled' }; }
   // 予約行にだけ書き込み(メイン行は触らない)
   // info.room(例「東105」「A101」)を、棟(先頭の漢字1文字またはアルファベット1文字)と
   // 号室(残りの数字部分)に分けて、それぞれ res_tou / res_room に振り分ける。
@@ -4902,36 +4846,12 @@ function linkReservationToSpot(info){
     if(m){ return { tou: m[1], room: (m[2]||'').trim() }; }
     return { tou:'', room: s };
   };
-  let writtenDate = '';
-  // ★ 区画番号を変更した場合に備え、今回の対象区画(targets)以外に残っている
-  //    この契約の予約を先に解除する(古い区画の予約が二重に残らないように)。
-  const targetSet = new Set(targets);
-  const srcKey = info.srcKey || '';
-  const contractor = String(info.contractor || '').trim();
-  Object.values(all).forEach(bb => {
-    if(!bb || !Array.isArray(bb.spots)) return;
-    const sameBuilding = (bb === bld);
-    bb.spots.forEach(sp => {
-      if(!sp || targetSet.has(sp)) return;   // 今回書き込む区画は対象外
-      const hasRes = !!(sp.res_user || sp.res_date || sp.res_srcKey);
-      if(!hasRes) return;
-      // srcKeyが一致すれば確実にこの契約の旧予約 → どの物件でも解除。
-      // srcKeyが無い場合のみ、同じ物件内で予約者名が一致するものを解除(別物件の同名は触らない)。
-      const bySrc  = !!(srcKey && sp.res_srcKey && sp.res_srcKey === srcKey);
-      const byName = !srcKey && sameBuilding && !!(contractor && sp.res_user && sp.res_user === contractor);
-      if(bySrc || byName){
-        delete sp.res_user; delete sp.res_date; delete sp.res_srcKey;
-        delete sp.res_tou; delete sp.res_room; delete sp.res_price; delete sp.res_note;
-      }
-    });
-  });
   targets.forEach(t => {
     t.res_user = info.contractor;
     // 予約日は input[type=date] が確実に表示できる YYYY-MM-DD 形式に正規化して書き込む。
     // (契約日が "2026/06/25" 等の形式でも、ここで "2026-06-25" に揃える)
     const normDate = (typeof normalizeDate === 'function') ? normalizeDate(info.contractDate) : info.contractDate;
     t.res_date = normDate || info.contractDate;
-    writtenDate = t.res_date;
     if(info.srcKey) t.res_srcKey = info.srcKey;
     if(info.room){
       const sp = splitTouRoom(info.room);
@@ -4940,8 +4860,6 @@ function linkReservationToSpot(info){
     }
   });
   saveAll(all);
-  // 予約の書き込みは即座にクラウドへ送信(後からの取り込みで消えないように)
-  try{ if(typeof window.__pushNow === 'function'){ window.__pushNow(); } }catch(e){}
   if(typeof renderList === 'function'){ try{ renderList(); }catch(e){} }
   // 物件管理タブで同じ物件を開いていれば最新データで開き直して同期。
   try{
@@ -4953,83 +4871,10 @@ function linkReservationToSpot(info){
       if(isOpen){ openModal(bld.id); }
     }
   }catch(e){}
-  return { ok:true, bldName: bldName, no: targets.map(t=>t.no).join('・'), count: targets.length, resDate: writtenDate };
+  return { ok:true, bldName: bldName, no: targets.map(t=>t.no).join('・'), count: targets.length };
 }
 // 契約管理(別IIFE)から呼べるよう公開
 window.PV_linkReservation = linkReservationToSpot;
-
-// ===== 契約削除・キャンセル時: その契約の駐車場予約を解除 =====
-// info = { contractor, srcKey, property?, parking? }
-// ・対象は「res_srcKey が一致」または「予約者名が一致」する予約行。
-// ・他人の予約(予約者名が違う)は残す。メイン行(現使用者)には触れない。
-function unlinkReservationFromSpots(info){
-  info = info || {};
-  const srcKey = info.srcKey || '';
-  const contractor = String(info.contractor || '').trim();
-  const carName = String(info.carContractor || '').trim();
-  if(!srcKey && !contractor && !carName) return { ok:false, removed:0 };
-  const all = loadAll();
-  let removed = 0;
-  const norm = s => String(s||'').replace(/\s+/g,'').trim();
-  const wantProp = norm(info.property || '');
-  Object.values(all).forEach(b => {
-    if(!b || !Array.isArray(b.spots)) return;
-    if(wantProp){
-      const nb = norm(b.name);
-      if(!(nb === wantProp || nb.includes(wantProp) || wantProp.includes(nb))) return;
-    }
-    b.spots.forEach(s => {
-      if(!s) return;
-      const hasRes = !!(s.res_user || s.res_date || s.res_srcKey);
-      if(!hasRes) return;
-      const bySrc  = !!(srcKey && s.res_srcKey && s.res_srcKey === srcKey);
-      const byName = !!(s.res_user && ((contractor && s.res_user === contractor) || (carName && s.res_user === carName)));
-      if(bySrc || byName){
-        delete s.res_user; delete s.res_date; delete s.res_srcKey;
-        delete s.res_tou; delete s.res_room; delete s.res_price; delete s.res_note;
-        removed++;
-      }
-    });
-  });
-  if(removed > 0){
-    saveAll(all);
-    try{ if(typeof window.__pushNow === 'function'){ window.__pushNow(); } }catch(e){}
-    if(typeof renderList === 'function'){ try{ renderList(); }catch(e){} }
-    try{
-      if(typeof currentEditId !== 'undefined' && currentEditId && typeof openModal === 'function'){
-        const m = document.getElementById('modal');
-        const isOpen = m && (m.style.display === 'flex' || m.style.display === 'block' || (m.offsetParent !== null));
-        if(isOpen){ openModal(currentEditId); }
-      }
-    }catch(e){}
-  }
-  return { ok:true, removed: removed };
-}
-window.PV_unlinkReservation = unlinkReservationFromSpots;
-
-// この契約に紐づく駐車場予約が存在するか(確認ダイアログを無駄に出さないため)
-function hasLinkedReservation(info){
-  info = info || {};
-  const srcKey = info.srcKey || '';
-  const contractor = String(info.contractor || '').trim();
-  const carName = String(info.carContractor || '').trim();
-  if(!srcKey && !contractor && !carName) return false;
-  const all = loadAll();
-  let found = false;
-  Object.values(all).forEach(b => {
-    if(found || !b || !Array.isArray(b.spots)) return;
-    b.spots.forEach(s => {
-      if(found || !s) return;
-      const hasRes = !!(s.res_user || s.res_date || s.res_srcKey);
-      if(!hasRes) return;
-      const bySrc  = !!(srcKey && s.res_srcKey && s.res_srcKey === srcKey);
-      const byName = !!(s.res_user && ((contractor && s.res_user === contractor) || (carName && s.res_user === carName)));
-      if(bySrc || byName) found = true;
-    });
-  });
-  return found;
-}
-window.PV_hasReservation = hasLinkedReservation;
 
 
 
@@ -7869,10 +7714,8 @@ function switchApp(which){
   document.getElementById('tab-pivot').classList.toggle('active', which!=='kanban');
   document.getElementById('tab-kanban').classList.toggle('active', which==='kanban');
   if(which==='kanban' && window.KB && window.KB.renderAll){ try{ window.KB.renderAll(); }catch(e){} }
-  // 注意: タブ切替ではクラウドからの取り込み(上書き)を行わない。
-  // (取り込むと、入力直後・送信前のデータが古いクラウド内容で上書きされ「消えた・戻った」が起きるため)
-  // 未送信の変更があれば送信だけ行う(取り込みはしない)。
-  try{ if(typeof window.__pushNow === 'function'){ window.__pushNow(); } }catch(e){}
+  // タブを押すたびにクラウドから最新を取り込む(未保存時のみ確認)
+  try{ if(typeof window.forcePullLatest === 'function'){ window.forcePullLatest(); } }catch(e){}
 }
 </script>
 <script>
@@ -7944,8 +7787,6 @@ const ITEM_ICON = {
   trophy: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3a3a3c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 5H4.5a2.5 2.5 0 0 0 2.5 4M17 5h2.5a2.5 2.5 0 0 1-2.5 4"/><path d="M12 13v3M9 20h6M10 16h4l.5 4h-5z"/></svg>'),
   esign: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3a3a3c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h9l4 4v12H5z"/><path d="M13 4v4h4"/><path d="M8 16c2-1 4-3 7-2"/><path d="M14.5 13.5l3-3 1.5 1.5-3 3z"/></svg>'),
   guarantee: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3a3a3c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="5.5"/><path d="M6.5 10h11M12 4.5v11" stroke-width="2"/><rect x="4" y="18" width="16" height="2.2" rx="1" fill="#3a3a3c" stroke="none"/></svg>'),
-  // ひな形送付済み(法人): 書類+送信
-  hinagata: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3a3a3c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h7l4 4v6.5"/><path d="M12 3v4h4"/><path d="M5 3v18h7"/><path d="M8 8.5h3M8 12h3M8 15.5h2"/><path d="M21 17l-6 2.2L17 14z"/><path d="M21 17l-4.5 1.6"/></svg>'),
 };
 
 // アイテム定義(キー, ラベル, 取得判定関数, クリック時のON/OFF値)
@@ -7986,14 +7827,8 @@ const ITEMS = [
     got:v => v==='完了', on:'完了', off:'', note:v => v || '' },
   { key:'keyHandover', label:'鍵渡し',       icon:'keyhand',
     got:v => v==='完了', on:'完了', off:'', note:v => v || '' },
-  { key:'hinagata',    label:'ひな形送付済み', icon:'hinagata',
-    corpOnly:true, got:v => v==='完了', on:'完了', off:'', note:v => v || '' },
 ];
 function itemGot(c, item){ return item.got(c[item.key]); }
-// 法人専用アイテムか(corpOnly)を、契約種別に応じて表示対象とするか判定
-function itemApplies(c, item){ return item.corpOnly ? ((c && c.type) === '法人') : true; }
-// 種別に応じて表示・集計対象になるアイテム一覧
-function applicableItems(c){ return ITEMS.filter(it => itemApplies(c, it)); }
 // 日付記録項目(同じ仕様: クリックで色と日付)
 const DATE_ITEMS = [
   { key:'esignDate',     label:'電子署名',   icon:'esign' },
@@ -8192,23 +8027,22 @@ const BASIC_LABELS = { applyDate:'申込日', type:'種別', contractDate:'契�
 function missingLabels(c){
   const out = [];
   BASIC_KEYS.forEach(k => { if(!basicDone(c, k)) out.push(BASIC_LABELS[k] || k); });
-  applicableItems(c).forEach(it => {
+  ITEMS.forEach(it => {
     if(it.key === 'pet') return;          // ペットは任意
     if(!itemGot(c, it)) out.push(it.label);
   });
   return out;
 }
-// 達成数 / 合計(基本情報7 + 獲得アイテム ※法人時はひな形送付済みを含む)
+// 達成数 / 合計(基本情報7 + 獲得アイテム13 = 20)
 function contractProgress(c){
-  const applicable = applicableItems(c);
   const basic = BASIC_KEYS.filter(k => basicDone(c, k)).length;
-  const items = applicable.filter(it => (it.key === 'pet') ? true : itemGot(c, it)).length;
-  return { done: basic + items, total: BASIC_KEYS.length + applicable.length };
+  const items = ITEMS.filter(it => (it.key === 'pet') ? true : itemGot(c, it)).length;
+  return { done: basic + items, total: BASIC_KEYS.length + ITEMS.length };
 }
 // 全項目完了で「完了」
 function isContractComplete(c){
   if(!basicInfoComplete(c)) return false;
-  for(const it of applicableItems(c)){
+  for(const it of ITEMS){
     if(it.key === 'pet') continue;
     if(!itemGot(c, it)) return false;
   }
@@ -8216,49 +8050,13 @@ function isContractComplete(c){
 }
 // カードの状態色: complete(青) / defect(赤・基本情報未完了) / almost(緑 17〜19) / progress(紫 16以下)
 function cardStatus(c){
-  // 手動でキャンセル・審査落ちに設定されている場合は最優先(グレー)
-  if(isCancelStatus(c)) return 'cancel';
   if(isContractComplete(c)) return 'complete';
   if(!basicInfoComplete(c)) return 'defect';
   const done = contractProgress(c).done;
   if(done >= 17) return 'almost';
   return 'progress';
 }
-// カードのプルダウンで選べる状況(7段階) + 自動表示(ひな形送付済み)
-//  申込/審査中/審査完了/条件確認中/契約書類作成中/契約書類作成完了/キャンセル・審査落ち
-//  ひな形送付済み(hinagata)は法人でアイテム取得時に自動表示(手動選択肢には出さない)
-const DEAL_STATUSES = [
-  { key:'apply',      label:'申込',             text:'#3a3a3c', bg:'#e8e8ec', tone:'progress' },
-  { key:'screening',  label:'審査中',           text:'#9a5b00', bg:'#ffe9c7', tone:'progress' },
-  { key:'screen_ok',  label:'審査完了',         text:'#1f7a3d', bg:'#d8f3e2', tone:'progress' },
-  { key:'condition',  label:'条件確認中',       text:'#0a6e8e', bg:'#d4f0fb', tone:'progress' },
-  { key:'doc_making', label:'契約書類作成中',   text:'#3b39b5', bg:'#e4e3fb', tone:'progress' },
-  { key:'doc_done',   label:'契約書類作成完了', text:'#7a2fa6', bg:'#f0e1fa', tone:'progress' },
-  { key:'cancel',     label:'キャンセル',       text:'#5b626b', bg:'#e4e6ea', tone:'cancel' },
-  { key:'rejected',   label:'審査落ち',         text:'#7a3a3a', bg:'#ecdede', tone:'cancel' },
-];
-// 手動選択肢(プルダウンに出す順)
-const DEAL_MENU = DEAL_STATUSES;
-// 自動状況: ひな形送付済み(法人 + 取得)
-function autoHinagata(c){
-  if(!c || c.type !== '法人') return false;
-  const it = ITEMS.find(x => x.key === 'hinagata');
-  return it ? itemGot(c, it) : false;
-}
-function dealStatusDef(key){ return DEAL_STATUSES.find(s => s.key === key) || null; }
-// キャンセル・審査落ち(グレー扱い)かどうか
-function isCancelStatus(c){ return !!(c && (c.dealStatus === 'cancel' || c.dealStatus === 'rejected')); }
-// プルダウン/カードに表示すべき状況キーを決定
-function dropdownStatus(c){
-  if(isCancelStatus(c)) return c.dealStatus;   // 'cancel' or 'rejected'
-  if(isContractComplete(c)) return 'complete';
-  if(autoHinagata(c)) return 'hinagata';
-  if(c && c.dealStatus){
-    if(dealStatusDef(c.dealStatus)) return c.dealStatus;
-  }
-  return 'apply';
-}
-const STATUS_COLOR = { complete:'#f5b400', defect:'#e60012', almost:'#34c759', progress:'#8e44d8', cancel:'#9aa1aa' };
+const STATUS_COLOR = { complete:'#f5b400', defect:'#e60012', almost:'#34c759', progress:'#8e44d8' };
 function progressCurrentIndex(c){
   let idx = -1;
   PROGRESS_STEPS.forEach((s, i) => { if(s.done(c)) idx = i; });
@@ -8337,67 +8135,28 @@ function renderCard(c){
   const curName = (curIdx < 0) ? '未着手' : cur.name;
   const statusLabel = isDone ? '✓ 完了' : (status==='defect' ? '基本情報不備あり' : (status==='almost' ? 'もうすぐ完了' : '進行中'));
 
-  const isCancel = (status === 'cancel');
-  const moveBtn = ((isDone || isCancel) && !c.archived)
-    ? '<button class="ct-move-done' + (isCancel ? ' ct-move-done-gray' : '') + '" onclick="KB.moveToDone(event,\'' + c.id + '\')">完了タブへ移動 ▸</button>'
+  const moveBtn = (isDone && !c.archived)
+    ? '<button class="ct-move-done" onclick="KB.moveToDone(event,\'' + c.id + '\')">完了タブへ移動 ▸</button>'
     : '';
-  // キャンセル・審査落ちカードには「申込に戻す」ボタン(復活用)
-  const revertBtn = (isCancel && !c.archived)
-    ? '<button class="ct-revert" onclick="KB.revertToApply(event,\'' + c.id + '\')">↩ 申込に戻す</button>'
-    : '';
-
-  // 状況プルダウン(7段階) + 自動表示(完了/ひな形送付済み)
-  const ddStatus = dropdownStatus(c);
-  // 表示色を決定(文字は濃色で見やすく、背景は淡色)
-  let ddColor, ddBg, ddLabel, ddIsAuto = false;
-  if(ddStatus === 'complete'){ ddColor = '#8a6500'; ddBg = '#fff0bf'; ddLabel = '完了'; ddIsAuto = true; }
-  else if(ddStatus === 'hinagata'){ ddColor = '#15703a'; ddBg = '#d8f3e2'; ddLabel = 'ひな形送付済み'; ddIsAuto = true; }
-  else {
-    const def = dealStatusDef(ddStatus) || DEAL_STATUSES[0];
-    ddColor = def.text;        // 濃い文字色
-    ddBg = def.bg;             // 淡い背景色
-    ddLabel = def.label;
-  }
-  // 手動メニュー(7項目)。自動状況(完了/ひな形)のときは現在値を一時的に先頭表示
-  const menuOpts = DEAL_MENU.map(s =>
-    '<option value="' + s.key + '"' + (ddStatus === s.key ? ' selected' : '') + '>' + s.label + '</option>'
-  ).join('');
-  const autoOpt = ddIsAuto
-    ? '<option value="__auto" selected disabled>' + ddLabel + '</option>'
-    : '';
-  const statusSelect =
-    '<select class="ct-status-select" ' +
-    'style="color:' + ddColor + ';background-color:' + ddBg + ';border-color:' + ddColor + ';"' +
-    ' onclick="event.stopPropagation();"' +
-    ' onchange="KB.onCardStatusChange(event,\'' + c.id + '\')"' +
-    ' title="この契約の状況を切り替えます">' +
-      autoOpt +
-      menuOpts +
-    '</select>';
-
   return '<div class="ct-card status-' + status + (isDone ? ' done' : '') + '" data-id="' + c.id + '" draggable="true"' +
     ' style="border-color:' + accent + ';"' +
     ' onclick="KB.onCardClick(event,\'' + c.id + '\')">' +
     '<button class="ct-card-del" title="この契約を削除" onclick="event.stopPropagation();KB.deleteCardContract(event,\'' + c.id + '\')">×</button>' +
-    '<div class="ct-head">' + statusSelect + '</div>' +
-    '<div class="ct-main">' +
-      '<div class="ct-badge" style="background:' + accent + ';">' +
-        '<img src="' + STAGE_ICON[isDone ? 'done' : iconForStep(cur.key)] + '" alt="">' +
-      '</div>' +
-      '<div class="ct-body">' +
-        '<div class="card-title">' + titleLine + '</div>' +
-        '<div class="card-sub"><span class="card-name">' + esc(c.contractor || '(契約者未入力)') + '</span></div>' +
-        cdateHtml(c) +
-        '<div class="ct-progress"><div class="prog-bar">' + segHtml + '</div>' +
-          '<div class="ct-stage-name' + (isDone ? ' done-label' : '') + '" style="color:' + accent + ';">' +
-            statusLabel +
-            ' <span class="ct-stage-count">' + doneCount + '/' + totalCount + '</span>' +
-          '</div>' +
+    '<div class="ct-badge" style="background:' + accent + ';">' +
+      '<img src="' + STAGE_ICON[isDone ? 'done' : iconForStep(cur.key)] + '" alt="">' +
+    '</div>' +
+    '<div class="ct-body">' +
+      '<div class="card-title">' + titleLine + '</div>' +
+      '<div class="card-sub"><span class="card-name">' + esc(c.contractor || '(契約者未入力)') + '</span></div>' +
+      cdateHtml(c) +
+      '<div class="ct-progress"><div class="prog-bar">' + segHtml + '</div>' +
+        '<div class="ct-stage-name' + (isDone ? ' done-label' : '') + '" style="color:' + accent + ';">' +
+          statusLabel +
+          ' <span class="ct-stage-count">' + doneCount + '/' + totalCount + '</span>' +
         '</div>' +
-        (c.memo ? '<div class="ct-memo">📝 ' + esc(c.memo).replace(/\n/g,'<br>') + '</div>' : '') +
       '</div>' +
     '</div>' +
-    ((moveBtn || revertBtn) ? '<div class="ct-actions">' + revertBtn + moveBtn + '</div>' : '') +
+    moveBtn +
   '</div>';
 }
 // カードのドラッグ並べ替え
@@ -8452,72 +8211,6 @@ function moveToDone(event, id){  event.stopPropagation();
   renderAll();
   toast('「' + (c.property||'契約') + '」を完了タブへ移動しました');
 }
-// キャンセル・審査落ちカードを「申込」に戻す(復活)
-// 駐車場予約を復活するか確認して、OKなら復活する(申込に戻す・通常状態に戻す両方で使用)
-function maybeRestoreReservation(c){
-  try{
-    if(c && c.property && c.parking && c.contractDate && typeof window.PV_linkReservation === 'function'){
-      if(confirm('紐づいていた駐車場予約も復活させますか?')){
-        const resName = (c.type === '法人' && c.carContractor && c.carContractor.trim())
-          ? c.carContractor.trim() : c.contractor;
-        const r = window.PV_linkReservation({
-          property: c.property, parking: c.parking, room: c.room,
-          contractor: resName, contractDate: c.contractDate, srcKey: c.id,
-          silent: true
-        });
-        if(r && r.ok){ toast('駐車場予約を復活しました'); }
-        else if(r && r.reason === 'already'){ toast('駐車場予約はすでに登録済みです'); }
-        else if(r && r.msg){ toast(r.msg); }
-      }
-    }
-  }catch(e){}
-}
-function revertToApply(event, id){
-  if(event) event.stopPropagation();
-  const all = loadAll();
-  const c = all[id];
-  if(!c) return;
-  c.dealStatus = 'apply';
-  saveAll(all);
-  renderAll();
-  toast('「' + (c.property||'契約') + '」を申込に戻しました');
-  maybeRestoreReservation(c);
-}
-// カード状況プルダウンの変更
-function onCardStatusChange(event, id){
-  if(event) event.stopPropagation();
-  const sel = event && event.target;
-  const val = sel ? sel.value : '';
-  const all = loadAll();
-  const c = all[id];
-  if(!c){ return; }
-  if(val === 'cancel' || val === 'rejected'){
-    const lbl = (val === 'cancel') ? 'キャンセル' : '審査落ち';
-    // グレー化。完了タブへの移動・申込復活はカード上のボタンで行う
-    c.dealStatus = val;
-    saveAll(all);
-    renderAll();
-    // 紐づいている駐車場予約があるときだけ「削除しますか?」を確認(無ければ聞かない)
-    try{
-      const info = { contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking };
-      if(typeof window.PV_unlinkReservation === 'function'
-         && typeof window.PV_hasReservation === 'function'
-         && window.PV_hasReservation(info)){
-        if(confirm('「' + (c.property||'契約') + '」を' + lbl + 'にしました。\n紐づいている駐車場予約も削除しますか?')){
-          const r = window.PV_unlinkReservation(info);
-          if(r && r.removed > 0){ toast('駐車場予約も削除しました'); }
-        }
-      }
-    }catch(e){}
-  } else {
-    // 申込〜契約書類作成完了 などの段階を保存
-    const wasCancel = (c.dealStatus === 'cancel' || c.dealStatus === 'rejected');
-    c.dealStatus = val;
-    saveAll(all);
-    renderAll();
-    if(wasCancel){ maybeRestoreReservation(c); }
-  }
-}
 function iconForStep(key){
   const m = {applyDate:'apply', contractDate:'cdate', sendDate:'send', returnDate:'return', paymentDate:'pay', keyHandover:'key', doneStage:'done'};
   return m[key] || 'apply';
@@ -8565,9 +8258,8 @@ function showPreview(id){
     (c.contractDate ? '<span class="pv-tag">契約日 ' + esc(c.contractDate.slice(5).replace('-','/')) + '</span>' : '');
 
   // 獲得アイテム(大きく表示)
-  const pvItems = applicableItems(c);
-  const gotCount = pvItems.filter(it => itemGot(c, it)).length;
-  const itemsBig = pvItems.map(it => {
+  const gotCount = ITEMS.filter(it => itemGot(c, it)).length;
+  const itemsBig = ITEMS.map(it => {
     const got = itemGot(c, it);
     const gotDate = (c.itemDates && c.itemDates[it.key]) ? c.itemDates[it.key].slice(5).replace('-','/') : '';
     return '<div class="pv-item' + (got ? ' got' : '') + '">' +
@@ -8585,11 +8277,10 @@ function showPreview(id){
     '<div class="pv-contractor">' + esc(c.contractor || '(契約者未入力)') + '</div>' +
     (c.broker ? '<div class="pv-broker">🏢 ' + esc(c.broker) + '</div>' : '') +
     '<div class="pv-meta">' + metaHtml + '</div>' +
-    '<div class="pv-section-title">🎒 獲得アイテム (' + gotCount + ' / ' + pvItems.length + ')</div>' +
+    '<div class="pv-section-title">🎒 獲得アイテム (' + gotCount + ' / ' + ITEMS.length + ')</div>' +
     '<div class="pv-items">' + itemsBig + '</div>' +
     '<div class="pv-section-title">ステージ到達履歴</div>' +
     '<div class="pv-stages">' + stagesHtml + '</div>' +
-    (c.memo ? '<div class="pv-section-title">📝 備考</div><div class="pv-memo">' + esc(c.memo).replace(/\n/g,'<br>') + '</div>' : '') +
     '<button class="pv-edit-btn" onclick="KB.openSheet(\'' + id + '\')">編集する</button>';
 
   document.getElementById('preview-backdrop').classList.add('active');
@@ -8828,8 +8519,6 @@ function openSheet(id){
     DATE_ITEMS.forEach(it => { _editingDateValues[it.key] = c[it.key] || ''; });
   }
   fillForm(c || {stage:'申込'});
-  // 駐車場契約者: 既存データで法人名と異なる(=手入力された)場合は手動扱い
-  _carContractorManual = !!(c && c.carContractor && c.carContractor !== c.contractor);
   switchType((c && c.type) || '個人');
   switchWarn((c && c.warn) ? 1 : 0);
   _infoEditingKey = null;
@@ -8912,13 +8601,11 @@ function renderSheetItemSummary(){
   const tmp = {};
   ITEMS.forEach(it => { tmp[it.key] = _editingItemValues[it.key] || ''; });
   tmp.parking = get('f-parking');   // P区画は入力欄から
-  tmp.type = _editingType;          // 法人専用アイテムの表示判定に使う
   // 内部にもP区画値を反映
   _editingItemValues.parking = tmp.parking;
-  const shownItems = applicableItems(tmp);   // 個人ならひな形を除外
-  const gotCount = shownItems.filter(it => itemGot(tmp, it)).length;
+  const gotCount = ITEMS.filter(it => itemGot(tmp, it)).length;
   // フォーム値と取得日を同期(手入力で変えた場合も反映)
-  shownItems.forEach(it => {
+  ITEMS.forEach(it => {
     if(itemGot(tmp, it)){
       if(!_editingItemDates[it.key]) _editingItemDates[it.key] = today();
     } else {
@@ -8993,10 +8680,10 @@ function renderSheetItemSummary(){
     '</div>';
   };
   elc.innerHTML =
-    '<div class="sis-count">' + gotCount + ' / ' + shownItems.length + ' 取得 ' +
+    '<div class="sis-count">' + gotCount + ' / ' + ITEMS.length + ' 取得 ' +
       '<span style="font-weight:500;color:#999;">(アイコンをタップで取得 / もう一度タップで解除)</span></div>' +
     '<div class="dd-grid">' +
-      shownItems.map(it => itemHtml(it)).join('') +
+      ITEMS.map(it => itemHtml(it)).join('') +
     '</div>';
 }
 // 駐車場アイコンのタップ: トグルしない。番号が空なら警告して入力欄へフォーカス
@@ -9262,20 +8949,7 @@ function switchType(type){
   const lbl = document.getElementById('lbl-contractor');
   if(lbl) lbl.textContent = isCorp ? '法人名' : '契約者(個人)';
   document.querySelectorAll('.corp-only').forEach(el => el.style.display = isCorp ? 'flex' : 'none');
-  // 駐車場契約者欄の同期: 法人で空なら法人名をセット / 個人なら使わない
-  const carEl = document.getElementById('f-carContractor');
-  const conEl = document.getElementById('f-contractor');
-  if(carEl){
-    if(isCorp){
-      if(!_carContractorManual && (carEl.value.trim() === '') && conEl){ carEl.value = conEl.value; }
-    } else {
-      // 個人契約では駐車場契約者は使わない(空に)
-      carEl.value = '';
-      _carContractorManual = false;
-    }
-  }
   if(typeof renderInfoIcons === 'function') renderInfoIcons();
-  if(typeof renderSheetItemSummary === 'function') renderSheetItemSummary();
 }
 function switchWarn(v){
   _editingWarn = v;
@@ -9307,9 +8981,7 @@ const INFO_FIELDS = [
     value:() => fmtDateVal(gv('f-contractDate')) },
   { key:'contractor', icon:'person', label:'契約者',
     inputs:() => (_editingType==='法人'
-        ? [{id:'f-contractor', label:'法人名', type:'text'},
-           {id:'f-carContractor', label:'駐車場契約者(空欄なら法人名と同じ)', type:'text', ph:'入居者名など'},
-           {id:'f-agent', label:'代行会社', type:'text', ph:'例: ○○管理'}]
+        ? [{id:'f-contractor', label:'法人名', type:'text'},{id:'f-agent', label:'代行会社', type:'text', ph:'例: ○○管理'}]
         : [{id:'f-contractor', label:'契約者(個人)', type:'text'}]),
     value:() => gv('f-contractor') },
   { key:'agency',   icon:'agency',   label:'仲介・担当',
@@ -9447,29 +9119,9 @@ function closeInfoEdit(){
   _autoSaveWasComplete = nowComplete;
 }
 function refreshInfoEdit(){ /* ポップアップ式では不要 */ }
-// 駐車場契約者を手入力で変えたかどうか(手入力されたら自動同期しない)
-let _carContractorManual = false;
 function syncInfoInput(id, val){
   const el = document.getElementById(id);
-  const carEl = document.getElementById('f-carContractor');
-  if(id === 'f-carContractor'){
-    // ユーザーが駐車場契約者を直接入力 → 以後は自動同期しない(空にすれば自動同期に戻る)
-    _carContractorManual = (val.trim() !== '');
-  }
   if(el){ el.value = val; }
-  // 法人名が変わったら、駐車場契約者が空 or 自動同期中のときは同じ名前を入れる
-  if(id === 'f-contractor' && _editingType === '法人' && carEl){
-    if(!_carContractorManual || carEl.value.trim() === ''){
-      carEl.value = val;
-      // ポップアップ表示中の駐車場契約者入力欄にも反映
-      try{
-        const popInputs = document.querySelectorAll('#info-popup-body input');
-        popInputs.forEach(pi => {
-          if(pi.getAttribute('oninput') && pi.getAttribute('oninput').indexOf('f-carContractor') >= 0){ pi.value = val; }
-        });
-      }catch(e){}
-    }
-  }
   // 契約日・P区画など連動が必要なものはイベントを発火
   if(id === 'f-contractDate'){ onContractDateChange(); }
   if(id === 'f-parking'){ renderSheetItemSummary(); }
@@ -9485,7 +9137,6 @@ function fillForm(c){
   set('f-parking', c.parking);
   set('f-pet', c.pet);
   set('f-contractor', c.contractor);
-  set('f-carContractor', c.carContractor);
   set('f-corpRep', c.corpRep);
   set('f-corpDept', c.corpDept);
   set('f-agent', c.agent);
@@ -9504,7 +9155,6 @@ function fillForm(c){
   set('f-guaranteeDate', c.guaranteeDate);
   set('f-keyHandover', c.keyHandover);
   set('f-paymentDate', c.paymentDate);
-  set('f-memo', c.memo);
 }
 // 編集中の入力からデータオブジェクトを組み立て
 function buildContractObject(){
@@ -9527,7 +9177,6 @@ function buildContractObject(){
     parking: get('f-parking'),
     pet: _editingItemValues.pet || '',
     contractor: contractor,
-    carContractor: get('f-carContractor'),
     corpRep: get('f-corpRep'),
     corpDept: get('f-corpDept'),
     agent: get('f-agent'),
@@ -9540,7 +9189,6 @@ function buildContractObject(){
     electric: _editingItemValues.electric || '',
     keyMail: _editingItemValues.keyMail || '',
     rescueFax: '',
-    memo: get('f-memo'),
     updatedAt: new Date().toISOString()
   });
   ITEMS.forEach(it => {
@@ -9607,14 +9255,11 @@ function linkCurrentToSpot(){
     alert('物件管理が読み込まれていません。再読み込みしてください');
     return;
   }
-  // 予約に反映する名前: 駐車場契約者があればそれ、空なら契約者名(法人名)
-  const resName = (c.type === '法人' && c.carContractor && c.carContractor.trim())
-    ? c.carContractor.trim() : c.contractor;
   const res = window.PV_linkReservation({
     property: c.property,
     parking: c.parking,
     room: c.room,
-    contractor: resName,
+    contractor: c.contractor,
     contractDate: c.contractDate,
     srcKey: c.id
   });
@@ -9622,11 +9267,11 @@ function linkCurrentToSpot(){
     _autoSaveWasLinkable = true;
     const noStr = String(res.no).split('・').map(n => 'P'+String(n).padStart(2,'0')).join('・');
     const cntStr = (res.count && res.count > 1) ? ('(' + res.count + '区画)') : '';
-    alert('「'+res.bldName+'」' + noStr + cntStr + ' の予約欄に予約中として登録しました。\n予約日: ' + (res.resDate || '') + '(契約確定日と同じ日付で登録)');
+    alert('「'+res.bldName+'」' + noStr + cntStr + ' の予約欄に予約中として登録しました');
   } else if(res && res.reason === 'cancelled'){
     /* ユーザーが確認ダイアログでキャンセル: 何もしない */
   } else if(res && res.reason === 'already'){
-    alert('変更がありません。\nこの内容ではすでにこの区画へ予約済みです。');
+    alert('この契約はすでにこの区画へ予約として紐づけ済みです');
   } else if(res && res.msg){
     alert(res.msg);
   } else {
@@ -9683,12 +9328,6 @@ function deleteCardContract(event, id){
   const c = all[id];
   const label = c ? ((c.property||'') + (c.contractor ? '(' + c.contractor + ')' : '')) : '';
   if(!confirm('この契約を削除しますか?\n' + label)) return;
-  // 紐づいた駐車場予約も自動で解除(この契約の予約だけ。他人の予約は残す)
-  try{
-    if(c && typeof window.PV_unlinkReservation === 'function'){
-      window.PV_unlinkReservation({ contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking });
-    }
-  }catch(e){}
   delete all[id];
   saveAll(all);
   toast('削除しました');
@@ -9808,8 +9447,6 @@ try{window.KB.loadAll=loadAll;}catch(e){}
 try{window.KB.missingLabels=missingLabels;}catch(e){}
 try{window.KB.moveGhost=moveGhost;}catch(e){}
 try{window.KB.moveToDone=moveToDone;}catch(e){}
-try{window.KB.revertToApply=revertToApply;}catch(e){}
-try{window.KB.onCardStatusChange=onCardStatusChange;}catch(e){}
 try{window.KB.onCardClick=onCardClick;}catch(e){}
 try{window.KB.onCardDragEnd=onCardDragEnd;}catch(e){}
 try{window.KB.onCardDragStart=onCardDragStart;}catch(e){}
