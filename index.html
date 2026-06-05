@@ -3720,7 +3720,13 @@ function openKeiyakuModal(spotIdx){
   if(!spot){ alert('区画情報が見つかりません'); return; }
   // 自動セット
   document.getElementById('ky-bld-name').value = bld.name || '';
-  document.getElementById('ky-bld-addr').value = bld.addr || '';
+  // 駐車場の所在地: 物件住所の末尾に「物件名 号室号室」を追記
+  // (号室は区画の号室があれば使用。予約中なら res_room を使用)
+  var _bldAddr = bld.addr || '';
+  var _bldSuffix = bld.name ? (' ' + bld.name) : '';
+  var _bldRm = (spot.room || spot.res_room || '');
+  if(_bldRm) _bldSuffix += ' ' + _bldRm + '号室';
+  document.getElementById('ky-bld-addr').value = (_bldAddr + _bldSuffix).trim();
   const spotNoStr = 'P' + String(spot.no || (spotIdx+1)).padStart(2,'0') + (spot.tou ? ' '+spot.tou+'棟' : '');
   document.getElementById('ky-spot-no').value = spotNoStr;
   document.getElementById('ky-price').value = (Number(spot.price)||0).toLocaleString();
