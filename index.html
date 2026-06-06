@@ -797,11 +797,13 @@ body.tab-kanban .kb-toolbar { display:flex; }
   }
   #kb-view .ct-head { display: flex; justify-content: space-between; align-items: center; min-height: 34px; gap: 8px; }
   #kb-view .ct-type-label {
-    flex: 0 0 auto; font-size: 18px; font-weight: 900; letter-spacing: 2px;
-    padding: 2px 12px 2px 28px; border-radius: 10px; line-height: 1.5;
+    flex: 0 0 auto; font-size: 16px; font-weight: 900; letter-spacing: 2px;
+    padding: 3px 14px; border-radius: 999px; line-height: 1.5;
+    border: 2.5px solid currentColor;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.12); margin-left: 4px;
   }
-  #kb-view .ct-type-label.ct-type-indiv { color: #2b6cb0; }
-  #kb-view .ct-type-label.ct-type-corp  { color: #b5651d; }
+  #kb-view .ct-type-label.ct-type-indiv { color: #2b6cb0; background: #eaf3ff; }
+  #kb-view .ct-type-label.ct-type-corp  { color: #c2701c; background: #fff1e0; }
   #kb-view .ct-main { display: flex; gap: 12px; align-items: flex-start; }
   #kb-view .ct-card { cursor: pointer; }
   /* 状態別の薄い背景: 不備=薄赤 → 進行中=薄紫 → もうすぐ=薄緑 → 完了=薄黄 */
@@ -1482,7 +1484,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
     #kb-view .ct-body .card-sub { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
     #kb-view .ct-status-select { font-size: 13px; padding: 5px 30px 5px 13px; background-position: right 10px center; }
     #kb-view .ct-head { min-height: 30px; }
-    #kb-view .ct-type-label { font-size: 15px; letter-spacing: 1px; padding-left: 26px; }
+    #kb-view .ct-type-label { font-size: 14px; letter-spacing: 1px; padding: 2px 11px; }
   }
   /* ===== 完了お祝い演出(body直下に出すため #kb-view で限定しない) ===== */
   .celebrate-overlay {
