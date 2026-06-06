@@ -9633,6 +9633,7 @@ function openInfoEdit(key){
   if(first){ first.focus(); }
 }
 function closeInfoEdit(){
+  const closedKey = _infoEditingKey;   // 閉じる直前に編集していた項目
   _infoEditingKey = null;
   const ov = document.getElementById('info-popup');
   if(ov){ ov.classList.remove('active'); }
@@ -9644,6 +9645,15 @@ function closeInfoEdit(){
     celebrateComplete(c);
   }
   _autoSaveWasComplete = nowComplete;
+  // 駐車場(区画)の入力ポップアップを閉じたとき、区画が空なら予約削除を確認する
+  if(closedKey === 'parking'){
+    const pEl = document.getElementById('f-parking');
+    const pv = pEl ? pEl.value.trim() : '';
+    if(pv === '' && typeof maybeUnlinkOnClear === 'function'){
+      maybeUnlinkOnClear('駐車場(区画)が未入力になりました');
+      return;   // 削除確認を優先(同時に予約案内は出さない)
+    }
+  }
   // 契約日とP区画がそろっていれば、ポップアップを閉じたこのタイミングで予約登録を案内する
   if(typeof maybeAutoLinkPrompt === 'function'){ maybeAutoLinkPrompt(c, false); }
 }
@@ -9679,7 +9689,8 @@ function syncInfoInput(id, val){
   // ★ 契約日 または 駐車場(P区画)を「空」にした場合、紐づいている駐車場予約の削除を確認する
   if(String(val||'').trim() === ''){
     if(id === 'f-contractDate'){ maybeUnlinkOnClear('契約日が未入力になりました'); }
-    else if(id === 'f-parking'){ maybeUnlinkOnClear('駐車場(区画)が未入力になりました'); }
+    // 注: 駐車場(f-parking)は入力途中で一瞬空になることがあるため、ここでは確認しない。
+    //     区画入力ポップアップを閉じたタイミング(closeInfoEdit)でまとめて判定する。
   }
 }
 function fillForm(c){
