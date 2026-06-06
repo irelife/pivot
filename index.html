@@ -9719,6 +9719,32 @@ function autoSave(){
   const linkable = !!(c.contractor && c.contractDate);
   if(linkable){ _autoSaveWasLinkable = true; }   // 手動側の状態整合のため維持
   else { _autoSaveWasLinkable = false; }
+  // ★ 契約日とP区画が両方そろったら「予約として登録しますか?」を自動で案内する。
+  //   (入力ポップアップ/カレンダーが開いている間は出さない。すでに紐づけ済みなら出さない)
+  maybeAutoLinkPrompt(c, popupOpen);
+}
+let _autoLinkPromptBusy = false;
+function maybeAutoLinkPrompt(c, popupOpen){
+  try{
+    if(popupOpen) return;                 // 入力中は邪魔しない
+    if(_autoLinkPromptBusy) return;       // ダイアログの多重表示を防ぐ
+    if(!c || !c.property || !c.parking || !c.contractDate) return;  // 両方そろっていない
+    if(typeof window.PV_hasReservation !== 'function' || typeof window.PV_linkReservation !== 'function') return;
+    const resName = (c.type === '法人' && c.carContractor && c.carContractor.trim())
+      ? c.carContractor.trim() : c.contractor;
+    const info = { contractor: resName, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking };
+    // すでにこの契約の予約が紐づいているなら、もう案内しない
+    if(window.PV_hasReservation(info)) return;
+    _autoLinkPromptBusy = true;
+    setTimeout(() => {
+      try{
+        if(confirm('契約日と駐車場(区画)が入力されました。\nこの区画に予約として登録しますか?')){
+          if(typeof linkCurrentToSpot === 'function'){ linkCurrentToSpot(); }
+        }
+      }catch(e){}
+      setTimeout(() => { _autoLinkPromptBusy = false; }, 400);
+    }, 50);
+  }catch(e){ _autoLinkPromptBusy = false; }
 }
 function saveContract(){ autoSave(); closeSheet(); }
 // 手動: 現在編集中の契約を区画の予約欄へ紐づける(ボタンから呼ばれる)
