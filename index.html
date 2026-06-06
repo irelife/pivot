@@ -2557,20 +2557,21 @@ function applyAutoSwitch(targets){
         s.status = '退';
         count++;
       } else if(t.type === 'reservation'){
-        // 予約者を現使用者に昇格する前に、現在のメインデータ(箱崎)を退避
-        if(s.status === '退' && s.user){
-          // 退去済データがあれば previous_users 配列に退避
+        // 予約者をメインに昇格する前に、現在の使用者がいれば「退去済」として履歴に退避する。
+        // (前契約者の状況に関わらず、予約到来時は退去済扱いにする)
+        if(s.user){
           if(!s.previous_users) s.previous_users = [];
-          s.previous_users.unshift({  // 新しいものを先頭に
+          s.previous_users.unshift({
             user: s.user || '',
             tou: s.tou || '',
             room: s.room || '',
             price: s.price || 0,
             note: s.note || '',
-            end_date: s.end_date || ''
+            end_date: s.end_date || t.resDate || '',
+            status: '退'   // 退去済
           });
         }
-        // 予約者をメインに昇格
+        // 予約者をメインに昇格(使用中)
         s.user = s.res_user || '';
         s.tou = s.res_tou || '';
         s.room = s.res_room || '';
@@ -2585,6 +2586,7 @@ function applyAutoSwitch(targets){
         delete s.res_price;
         delete s.res_note;
         delete s.end_date;
+        delete s.res_srcKey;
         count++;
       }
     });
@@ -2608,15 +2610,15 @@ function runAutoSwitch(userTriggered){
   // 対象一覧のメッセージを作る
   const lines = targets.map(t => {
     if(t.type === 'end'){
-      return '[退去] ' + t.bldName + ' ' + t.spotNo + ': ' + t.userName + '(解約日 ' + t.endDate + ')';
+      return '[退去済] ' + t.bldName + ' ' + t.spotNo + ': ' + t.userName + '(解約日 ' + t.endDate + ')';
     } else {
-      return '[使用中] ' + t.bldName + ' ' + t.spotNo + ': ' + t.userName + '(予約日 ' + t.resDate + ')';
+      return '[予約到来→使用中] ' + t.bldName + ' ' + t.spotNo + ': ' + t.userName + '(予約日 ' + t.resDate + ') ※前契約者は退去済に移動';
     }
   });
 
-  const msg = '📢 自動切替対象が ' + targets.length + ' 件あります。\n\n' +
+  const msg = '📢 本日到来した切替対象が ' + targets.length + ' 件あります。\n\n' +
               lines.join('\n') + '\n\n' +
-              '今すぐ切替しますか?';
+              '予約到来分は、前契約者を退去済にして、予約者を使用中に切り替えます。\n今すぐ切替しますか?';
 
   if(!confirm(msg)){
     console.log('[自動切替] ユーザーがキャンセル');
@@ -9471,11 +9473,29 @@ function onContractDateChange(){
     autoCompleteCheck();
     renderStageTimeline();
   }
-  if(v === ''){ maybeUnlinkOnClear('契約日が未入力になりました'); }
+  if(v === ''){
+    let oldDate = '';
+    try{
+      const all = loadAll();
+      const c = _editingId ? all[_editingId] : null;
+      if(c){ oldDate = c.contractDate || ''; }
+    }catch(e){}
+    maybeUnlinkOnClear('契約日が未入力になりました', function(){
+      if(oldDate && el){
+        el.value = oldDate;
+        if(_editingReached){ _editingReached['契約日確定'] = oldDate; }
+        try{ renderInfoIcons(); }catch(e){}
+        try{ renderStageTimeline(); }catch(e){}
+        autoSave();
+        toast('契約日を元に戻しました');
+      }
+    });
+  }
 }
 // 契約日/駐車場を空にしたとき、紐づく駐車場予約の削除を確認する共通処理(二重確認防止つき)
 let _unlinkPromptBusy = false;
-function maybeUnlinkOnClear(reasonMsg){
+let _parkingBeforeEdit = '';
+function maybeUnlinkOnClear(reasonMsg, onCancelRestore){
   if(_unlinkPromptBusy) return;
   try{
     const all = loadAll();
@@ -9485,10 +9505,12 @@ function maybeUnlinkOnClear(reasonMsg){
       const info = { contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking };
       if(window.PV_hasReservation(info)){
         _unlinkPromptBusy = true;
-        const ok = confirm(reasonMsg + '。\n紐づいている駐車場予約も削除しますか?');
+        const ok = confirm(reasonMsg + '。\n紐づいている駐車場予約も削除しますか?\n\nOK: 予約を削除\nキャンセル: 入力の取り消し(元に戻す)');
         if(ok){
           const r = window.PV_unlinkReservation(info);
           if(r && r.removed > 0){ toast('駐車場予約を削除しました'); }
+        } else {
+          if(typeof onCancelRestore === 'function'){ try{ onCancelRestore(); }catch(e){} }
         }
         setTimeout(() => { _unlinkPromptBusy = false; }, 600);
       }
@@ -9646,6 +9668,7 @@ function openInfoEdit(key){
   }
   // それ以外は中央ポップアップで入力
   _infoEditingKey = key;
+  if(key === 'parking'){ const pe = document.getElementById('f-parking'); _parkingBeforeEdit = pe ? pe.value : ''; }
   const ov = document.getElementById('info-popup');
   const body = document.getElementById('info-popup-body');
   if(!ov || !body) return;
@@ -9692,8 +9715,17 @@ function closeInfoEdit(){
     const pEl = document.getElementById('f-parking');
     const pv = pEl ? pEl.value.trim() : '';
     if(pv === '' && typeof maybeUnlinkOnClear === 'function'){
-      maybeUnlinkOnClear('駐車場(区画)が未入力になりました');
-      return;   // 削除確認を優先(同時に予約案内は出さない)
+      const oldParking = _parkingBeforeEdit || '';
+      maybeUnlinkOnClear('駐車場(区画)が未入力になりました', function(){
+        if(oldParking && pEl){
+          pEl.value = oldParking;
+          try{ renderInfoIcons(); }catch(e){}
+          try{ renderSheetItemSummary(); }catch(e){}
+          autoSave();
+          toast('駐車場(区画)を元に戻しました');
+        }
+      });
+      return;
     }
   }
   // 契約日とP区画がそろっていれば、ポップアップを閉じたこのタイミングで予約登録を案内する
