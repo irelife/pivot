@@ -8353,6 +8353,11 @@ function isCancelStatus(c){ return !!(c && (c.dealStatus === 'cancel' || c.dealS
 function dropdownStatus(c){
   if(isCancelStatus(c)) return c.dealStatus;   // 'cancel' or 'rejected'
   if(isContractComplete(c)) return 'complete';
+  // ユーザーが申込以外の段階を手動選択していれば、それを最優先で尊重する
+  if(c && c.dealStatus && c.dealStatus !== 'apply' && dealStatusDef(c.dealStatus)){
+    return c.dealStatus;
+  }
+  // 手動指定が無い(または申込のまま)で、法人かつひな形取得済みなら自動表示
   if(autoHinagata(c)) return 'hinagata';
   if(c && c.dealStatus){
     if(dealStatusDef(c.dealStatus)) return c.dealStatus;
