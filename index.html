@@ -9569,6 +9569,8 @@ function closeInfoEdit(){
     celebrateComplete(c);
   }
   _autoSaveWasComplete = nowComplete;
+  // 契約日とP区画がそろっていれば、ポップアップを閉じたこのタイミングで予約登録を案内する
+  if(typeof maybeAutoLinkPrompt === 'function'){ maybeAutoLinkPrompt(c, false); }
 }
 function refreshInfoEdit(){ /* ポップアップ式では不要 */ }
 // 駐車場契約者を手入力で変えたかどうか(手入力されたら自動同期しない)
