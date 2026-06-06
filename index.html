@@ -1650,7 +1650,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
       <!-- 日付入力(カレンダー直接オープン用に画面外へ配置) -->
       <div style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;">
         <input type="date" id="f-applyDate" onchange="KB.renderInfoIcons();autoSave()">
-        <input type="date" id="f-contractDate" onchange="KB.onContractDateChange();renderInfoIcons();autoSave()">
+        <input type="date" id="f-contractDate" onchange="KB.onContractDateChange();renderInfoIcons();autoSave()" oninput="KB.onContractDateChange()">
       </div>
       <!-- アイコン式フィールド(クリックで入力) -->
       <div class="info-icons" id="info-icons"></div>
@@ -9354,6 +9354,29 @@ function onContractDateChange(){
     autoCompleteCheck();
     renderStageTimeline();
   }
+  if(v === ''){ maybeUnlinkOnClear('契約日が未入力になりました'); }
+}
+// 契約日/駐車場を空にしたとき、紐づく駐車場予約の削除を確認する共通処理(二重確認防止つき)
+let _unlinkPromptBusy = false;
+function maybeUnlinkOnClear(reasonMsg){
+  if(_unlinkPromptBusy) return;
+  try{
+    const all = loadAll();
+    const c = _editingId ? all[_editingId] : null;
+    if(c && typeof window.PV_hasReservation === 'function'
+       && typeof window.PV_unlinkReservation === 'function'){
+      const info = { contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking };
+      if(window.PV_hasReservation(info)){
+        _unlinkPromptBusy = true;
+        const ok = confirm(reasonMsg + '。\n紐づいている駐車場予約も削除しますか?');
+        if(ok){
+          const r = window.PV_unlinkReservation(info);
+          if(r && r.removed > 0){ toast('駐車場予約を削除しました'); }
+        }
+        setTimeout(() => { _unlinkPromptBusy = false; }, 600);
+      }
+    }
+  }catch(e){ _unlinkPromptBusy = false; }
 }
 
 function switchType(type){
@@ -9577,22 +9600,9 @@ function syncInfoInput(id, val){
   renderInfoIcons();
   autoSave();
   // ★ 契約日 または 駐車場(P区画)を「空」にした場合、紐づいている駐車場予約の削除を確認する
-  if((id === 'f-contractDate' || id === 'f-parking') && String(val||'').trim() === ''){
-    try{
-      const all = loadAll();
-      const c = _editingId ? all[_editingId] : null;
-      if(c && typeof window.PV_hasReservation === 'function'
-         && typeof window.PV_unlinkReservation === 'function'){
-        const info = { contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking };
-        if(window.PV_hasReservation(info)){
-          const why = (id === 'f-contractDate') ? '契約日が未入力になりました' : '駐車場(区画)が未入力になりました';
-          if(confirm(why + '。\n紐づいている駐車場予約も削除しますか?')){
-            const r = window.PV_unlinkReservation(info);
-            if(r && r.removed > 0){ toast('駐車場予約を削除しました'); }
-          }
-        }
-      }
-    }catch(e){}
+  if(String(val||'').trim() === ''){
+    if(id === 'f-contractDate'){ maybeUnlinkOnClear('契約日が未入力になりました'); }
+    else if(id === 'f-parking'){ maybeUnlinkOnClear('駐車場(区画)が未入力になりました'); }
   }
 }
 function fillForm(c){
