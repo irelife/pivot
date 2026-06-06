@@ -795,7 +795,13 @@ body.tab-kanban .kb-toolbar { display:flex; }
     padding: 16px 20px 18px; cursor: pointer;
     transition: transform 0.12s, box-shadow 0.12s;
   }
-  #kb-view .ct-head { display: flex; justify-content: flex-end; align-items: center; min-height: 34px; }
+  #kb-view .ct-head { display: flex; justify-content: space-between; align-items: center; min-height: 34px; gap: 8px; }
+  #kb-view .ct-type-label {
+    flex: 0 0 auto; font-size: 18px; font-weight: 900; letter-spacing: 2px;
+    padding: 2px 12px 2px 28px; border-radius: 10px; line-height: 1.5;
+  }
+  #kb-view .ct-type-label.ct-type-indiv { color: #2b6cb0; }
+  #kb-view .ct-type-label.ct-type-corp  { color: #b5651d; }
   #kb-view .ct-main { display: flex; gap: 12px; align-items: flex-start; }
   #kb-view .ct-card { cursor: pointer; }
   /* 状態別の薄い背景: 不備=薄赤 → 進行中=薄紫 → もうすぐ=薄緑 → 完了=薄黄 */
@@ -1476,6 +1482,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
     #kb-view .ct-body .card-sub { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
     #kb-view .ct-status-select { font-size: 13px; padding: 5px 30px 5px 13px; background-position: right 10px center; }
     #kb-view .ct-head { min-height: 30px; }
+    #kb-view .ct-type-label { font-size: 15px; letter-spacing: 1px; padding-left: 26px; }
   }
   /* ===== 完了お祝い演出(body直下に出すため #kb-view で限定しない) ===== */
   .celebrate-overlay {
@@ -8509,7 +8516,10 @@ function renderCard(c){
     ' style="border-color:' + accent + ';"' +
     ' onclick="KB.onCardClick(event,\'' + c.id + '\')">' +
     '<button class="ct-card-del" title="この契約を削除" onclick="event.stopPropagation();KB.deleteCardContract(event,\'' + c.id + '\')">×</button>' +
-    '<div class="ct-head">' + statusSelect + '</div>' +
+    '<div class="ct-head">' +
+      '<span class="ct-type-label ct-type-' + ((c.type === '法人') ? 'corp' : 'indiv') + '">' + ((c.type === '法人') ? '法人' : '個人') + '</span>' +
+      statusSelect +
+    '</div>' +
     '<div class="ct-main">' +
       '<div class="ct-badge" style="background:' + accent + ';">' +
         '<img src="' + STAGE_ICON[isDone ? 'done' : iconForStep(cur.key)] + '" alt="">' +
@@ -8517,7 +8527,6 @@ function renderCard(c){
       '<div class="ct-body">' +
         '<div class="card-title">' + titleLine + '</div>' +
         '<div class="card-sub">' +
-          '<span class="ct-type-badge ct-type-' + ((c.type === '法人') ? 'corp' : 'indiv') + '">' + ((c.type === '法人') ? '法人' : '個人') + '</span>' +
           '<span class="card-name">' + esc(c.contractor || '(契約者未入力)') + '</span>' +
         '</div>' +
         cdateHtml(c) +
