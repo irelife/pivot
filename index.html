@@ -888,7 +888,13 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #kb-view .ct-body { flex: 1; min-width: 0; }
   #kb-view .ct-body .card-title { display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline; font-size: 19px; font-weight: 800; color: #1c1c1e; margin-bottom: 3px; }
   #kb-view .ct-body .t-room, #kb-view .ct-body .t-park { font-size: 16px; font-weight: 700; color: #5b6b7b; }
-  #kb-view .ct-body .card-sub { font-size: 14px; color: #6b6b70; margin-bottom: 8px; }
+  #kb-view .ct-body .card-sub { font-size: 14px; color: #6b6b70; margin-bottom: 8px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  #kb-view .ct-type-badge {
+    flex: 0 0 auto; font-size: 11px; font-weight: 800; letter-spacing: .5px;
+    padding: 2px 8px; border-radius: 999px; line-height: 1.4;
+  }
+  #kb-view .ct-type-badge.ct-type-indiv { background: #e8f1ff; color: #2b6cb0; border: 1px solid #bcd6f5; }
+  #kb-view .ct-type-badge.ct-type-corp  { background: #fdeede; color: #b5651d; border: 1px solid #f3d3a8; }
   #kb-view .ct-memo {
     margin-top: 8px; padding: 8px 11px; border-radius: 8px;
     background: #fffaf0; border: 1px solid #f0e4c8;
@@ -8510,7 +8516,10 @@ function renderCard(c){
       '</div>' +
       '<div class="ct-body">' +
         '<div class="card-title">' + titleLine + '</div>' +
-        '<div class="card-sub"><span class="card-name">' + esc(c.contractor || '(契約者未入力)') + '</span></div>' +
+        '<div class="card-sub">' +
+          '<span class="ct-type-badge ct-type-' + ((c.type === '法人') ? 'corp' : 'indiv') + '">' + ((c.type === '法人') ? '法人' : '個人') + '</span>' +
+          '<span class="card-name">' + esc(c.contractor || '(契約者未入力)') + '</span>' +
+        '</div>' +
         cdateHtml(c) +
         '<div class="ct-progress"><div class="prog-bar">' + segHtml + '</div>' +
           '<div class="ct-stage-name' + (isDone ? ' done-label' : '') + '" style="color:' + accent + ';">' +
