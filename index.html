@@ -1139,6 +1139,12 @@ body.tab-kanban .kb-toolbar { display:flex; }
   /* 「不要」の大きな赤文字 */
   #kb-view .dd-ok-red { font-size: 26px; font-weight: 900; color: #e60012; line-height: 1.05; }
   #kb-view .dd-date { font-size: 13px; font-weight: 700; color: #b8860b; }
+  #kb-view .dd-date-edit {
+    margin-top: 4px; font-size: 11px; font-weight: 700; color: inherit;
+    border: 1px solid currentColor; border-radius: 6px; padding: 1px 4px;
+    background: rgba(255,255,255,0.7); max-width: 112px; cursor: pointer;
+  }
+  #kb-view .dd-date-edit:focus { outline: none; box-shadow: 0 0 0 2px rgba(0,0,0,.1); }
   #kb-view .dd-note { font-size: 12px; font-weight: 800; line-height: 1.1; }
   #kb-view .dd-cycle-hint { font-size: 9px; color: #c0a000; font-weight: 700; }
   #kb-view .sis-item.auto { border-style: dashed; }
@@ -8346,7 +8352,10 @@ function autoHinagata(c){
   const it = ITEMS.find(x => x.key === 'hinagata');
   return it ? itemGot(c, it) : false;
 }
-function dealStatusDef(key){ return DEAL_STATUSES.find(s => s.key === key) || null; }
+function dealStatusDef(key){
+  if(key === 'hinagata') return { key:'hinagata', label:'ひな形送付済み', text:'#15703a', bg:'#d8f3e2', tone:'progress' };
+  return DEAL_STATUSES.find(s => s.key === key) || null;
+}
 // キャンセル・審査落ち(グレー扱い)かどうか
 function isCancelStatus(c){ return !!(c && (c.dealStatus === 'cancel' || c.dealStatus === 'rejected')); }
 // プルダウン/カードに表示すべき状況キーを決定
@@ -8452,22 +8461,31 @@ function renderCard(c){
     ? '<button class="ct-revert" onclick="KB.revertToApply(event,\'' + c.id + '\')">↩ 申込に戻す</button>'
     : '';
 
-  // 状況プルダウン(7段階) + 自動表示(完了/ひな形送付済み)
+  // 状況プルダウン。法人のときは「ひな形送付済み」を選択肢に追加する。
   const ddStatus = dropdownStatus(c);
+  const isCorp = (c && c.type === '法人');
   // 表示色を決定(文字は濃色で見やすく、背景は淡色)
   let ddColor, ddBg, ddLabel, ddIsAuto = false;
   if(ddStatus === 'complete'){ ddColor = '#8a6500'; ddBg = '#fff0bf'; ddLabel = '完了'; ddIsAuto = true; }
-  else if(ddStatus === 'hinagata'){ ddColor = '#15703a'; ddBg = '#d8f3e2'; ddLabel = 'ひな形送付済み'; ddIsAuto = true; }
+  else if(ddStatus === 'hinagata'){ ddColor = '#15703a'; ddBg = '#d8f3e2'; ddLabel = 'ひな形送付済み'; }
   else {
     const def = dealStatusDef(ddStatus) || DEAL_STATUSES[0];
     ddColor = def.text;        // 濃い文字色
     ddBg = def.bg;             // 淡い背景色
     ddLabel = def.label;
   }
-  // 手動メニュー(7項目)。自動状況(完了/ひな形)のときは現在値を一時的に先頭表示
-  const menuOpts = DEAL_MENU.map(s =>
+  // 選択肢: 法人なら「契約書類作成完了」の後に「ひな形送付済み」を差し込む
+  const menuItems = [];
+  DEAL_MENU.forEach(s => {
+    menuItems.push(s);
+    if(isCorp && s.key === 'doc_done'){
+      menuItems.push({ key:'hinagata', label:'ひな形送付済み' });
+    }
+  });
+  const menuOpts = menuItems.map(s =>
     '<option value="' + s.key + '"' + (ddStatus === s.key ? ' selected' : '') + '>' + s.label + '</option>'
   ).join('');
+  // 完了は自動表示専用(手動選択肢に無い)。その場合だけ先頭にダミー表示。
   const autoOpt = ddIsAuto
     ? '<option value="__auto" selected disabled>' + ddLabel + '</option>'
     : '';
@@ -9090,12 +9108,21 @@ function renderSheetItemSummary(){
                  cycleHint;
     }
     const shownClass = (got || emptyRed) ? 'in-zone' : 'in-tray';
+    // 取得済みアイテム(駐車場・ペット以外)は取得日を手入力できる小さな日付欄を表示
+    const showDateEdit = got && !isParking && !isPet;
+    const dateEdit = showDateEdit
+      ? '<input type="date" class="dd-date-edit" value="' + (d || '') + '"' +
+        ' onclick="event.stopPropagation();"' +
+        ' onchange="event.stopPropagation();KB.setItemDate(\'' + it.key + '\', this.value)"' +
+        ' title="取得日を変更できます">'
+      : '';
     return '<div class="dd-item ' + shownClass + variantClass + '"' + styleAttr +
       ' data-key="' + it.key + '" title="' + tip + '"' +
       ' onclick="' + onclick + '">' +
       '<div class="dd-iconwrap"><img src="' + ITEM_ICON[iconKey] + '" alt="' + it.label + '">' + redCross + '</div>' +
       '<span class="dd-label">' + it.label + '</span>' +
       bodyHtml +
+      dateEdit +
     '</div>';
   };
   elc.innerHTML =
@@ -9148,10 +9175,34 @@ function setItemGot(key, makeGot){
     }
     delete _editingItemDates[key];
   }
+  // ★ ひな形送付済みアイテムの取得/解除で、状況プルダウンを自動連動させる
+  if(key === 'hinagata' && _editingId){
+    try{
+      const all2 = loadAll();
+      const c2 = all2[_editingId];
+      if(c2){
+        if(makeGot){
+          if(c2.dealStatus !== 'cancel' && c2.dealStatus !== 'rejected'){ c2.dealStatus = 'hinagata'; }
+        } else {
+          if(c2.dealStatus === 'hinagata'){ c2.dealStatus = 'apply'; }
+        }
+        all2[_editingId] = c2;
+        saveAll(all2);
+      }
+    }catch(e){}
+  }
   renderSheetItemSummary();
   autoSave();
 }
-// 枠内のcycle項目をタップで状態切替(火災保険など)。巡回しきったら未選択(トレイ)へ戻る
+// アイテムの取得日を手入力で変更する
+function setItemDate(key, val){
+  if(!key) return;
+  const v = String(val||'').trim();
+  if(v){ _editingItemDates[key] = v; }
+  else { /* 空にしても取得状態は維持。日付だけ消す */ delete _editingItemDates[key]; }
+  renderSheetItemSummary();
+  autoSave();
+}
 function cycleZoneItem(key){
   const it = ITEMS.find(x => x.key === key);
   if(!it || !it.cycle) return;
@@ -9278,6 +9329,25 @@ function toggleSheetItem(key){
   } else {
     _editingItemValues[key] = it.on || '完了';
     if(!_editingItemDates[key]) _editingItemDates[key] = today();
+  }
+  // ★ ひな形送付済みアイテムを取得したら、状況プルダウンを自動で「ひな形送付済み」にする。
+  //    解除したら、ひな形になっていた場合のみ「申込」に戻す。
+  if(key === 'hinagata' && _editingId){
+    try{
+      const all2 = loadAll();
+      const c2 = all2[_editingId];
+      if(c2){
+        const nowGot = itemGot({ hinagata: _editingItemValues.hinagata }, it);
+        if(nowGot){
+          // すでにキャンセル/審査落ち/完了でなければ、ひな形送付済みに切り替え
+          if(c2.dealStatus !== 'cancel' && c2.dealStatus !== 'rejected'){ c2.dealStatus = 'hinagata'; }
+        } else {
+          if(c2.dealStatus === 'hinagata'){ c2.dealStatus = 'apply'; }
+        }
+        all2[_editingId] = c2;
+        saveAll(all2);
+      }
+    }catch(e){}
   }
   renderSheetItemSummary();
   autoSave();
@@ -10027,6 +10097,7 @@ try{window.KB.saveAll=saveAll;}catch(e){}
 try{window.KB.saveContract=saveContract;}catch(e){}
 try{window.KB.seed=seed;}catch(e){}
 try{window.KB.setItemGot=setItemGot;}catch(e){}
+try{window.KB.setItemDate=setItemDate;}catch(e){}
 try{window.KB.setSortMode=setSortMode;}catch(e){}
 try{window.KB.showPreview=showPreview;}catch(e){}
 try{window.KB.stageIcon=stageIcon;}catch(e){}
