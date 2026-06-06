@@ -8637,8 +8637,25 @@ function onCardStatusChange(event, id){
     // 申込〜契約書類作成完了 などの段階を保存
     const wasCancel = (c.dealStatus === 'cancel' || c.dealStatus === 'rejected');
     c.dealStatus = val;
+    // ★ プルダウンで「ひな形送付済み」を選んだら、獲得アイテムも当日の日付でOKにする
+    if(val === 'hinagata'){
+      if(c.hinagata !== '完了'){ c.hinagata = '完了'; }
+      c.itemDates = c.itemDates || {};
+      if(!c.itemDates.hinagata){
+        const _t = new Date();
+        c.itemDates.hinagata = _t.getFullYear() + '-' + String(_t.getMonth()+1).padStart(2,'0') + '-' + String(_t.getDate()).padStart(2,'0');
+      }
+    }
     saveAll(all);
     renderAll();
+    // もし編集画面(シート)を開いている契約なら、アイテム表示も更新する
+    try{
+      if(_editingId === id){
+        if(typeof _editingItemValues !== 'undefined'){ _editingItemValues.hinagata = c.hinagata || ''; }
+        if(typeof _editingItemDates !== 'undefined' && c.itemDates){ _editingItemDates.hinagata = c.itemDates.hinagata || _editingItemDates.hinagata; }
+        if(typeof renderSheetItemSummary === 'function'){ renderSheetItemSummary(); }
+      }
+    }catch(e){}
     if(wasCancel){ maybeRestoreReservation(c); }
   }
 }
