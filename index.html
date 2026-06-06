@@ -9576,6 +9576,24 @@ function syncInfoInput(id, val){
   if(id === 'f-parking'){ renderSheetItemSummary(); }
   renderInfoIcons();
   autoSave();
+  // ★ 契約日 または 駐車場(P区画)を「空」にした場合、紐づいている駐車場予約の削除を確認する
+  if((id === 'f-contractDate' || id === 'f-parking') && String(val||'').trim() === ''){
+    try{
+      const all = loadAll();
+      const c = _editingId ? all[_editingId] : null;
+      if(c && typeof window.PV_hasReservation === 'function'
+         && typeof window.PV_unlinkReservation === 'function'){
+        const info = { contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking };
+        if(window.PV_hasReservation(info)){
+          const why = (id === 'f-contractDate') ? '契約日が未入力になりました' : '駐車場(区画)が未入力になりました';
+          if(confirm(why + '。\n紐づいている駐車場予約も削除しますか?')){
+            const r = window.PV_unlinkReservation(info);
+            if(r && r.removed > 0){ toast('駐車場予約を削除しました'); }
+          }
+        }
+      }
+    }catch(e){}
+  }
 }
 function fillForm(c){
   const set = (id, v) => { const el = document.getElementById(id); if(el) el.value = v || ''; };
