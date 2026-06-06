@@ -1580,6 +1580,8 @@ body.tab-kanban .kb-toolbar { display:flex; }
       <button onclick="closeSettingsMenu();openImgDiagModal()">画像チェック</button>
       <div class="settings-menu-sep"></div>
       <button onclick="closeSettingsMenu();openCsvImportModal()" class="settings-menu-primary">CSV一括インポート</button>
+      <div class="settings-menu-sep"></div>
+      <button onclick="closeSettingsMenu();pivotLogout()">🔓 ログアウト</button>
     </div>
   </div>
   <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="restoreBackup(event)">
@@ -2384,6 +2386,12 @@ try {
   if (typeof firebase !== 'undefined' && firebase.initializeApp) {
     firebase.initializeApp(FIREBASE_CONFIG);
     _firebaseReady = true;
+    // ログイン維持はこのタブ/セッション中のみ。ブラウザ(タブ)を閉じたら再ログインが必要。
+    try{
+      if(firebase.auth && firebase.auth.Auth && firebase.auth.Auth.Persistence){
+        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION);
+      }
+    }catch(e){ console.warn('persistence設定に失敗:', e); }
   }
 } catch (e) {
   console.error('Firebase初期化に失敗:', e);
