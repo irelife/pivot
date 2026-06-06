@@ -2434,8 +2434,21 @@ function todayStr(){
 // 日付文字列を比較しやすい形に正規化("2026/05/26" や "2026-5-26" → "2026-05-26")
 function normalizeDate(s){
   if(!s) return '';
-  // YYYY-M-D, YYYY/M/D, YYYY.M.D などを統一
-  const m = String(s).match(/^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/);
+  const str = String(s).trim();
+  // クラウド(GAS/スプレッドシート)が日付を Date型に変換して返すと
+  // "2026-06-30T15:00:00.000Z" のような UTC日時文字列になり、頭3つの数字を取ると
+  // 1日前(6/30)になってしまう。時刻付き(T や Z や コロン)の場合はローカル日付に直す。
+  if(/T\d|Z$|\d{2}:\d{2}/.test(str)){
+    const d = new Date(str);
+    if(!isNaN(d.getTime())){
+      const y = d.getFullYear();
+      const mo = String(d.getMonth()+1).padStart(2,'0');
+      const da = String(d.getDate()).padStart(2,'0');
+      return y + '-' + mo + '-' + da;
+    }
+  }
+  // 通常の YYYY-M-D, YYYY/M/D, YYYY.M.D は文字列のまま統一(タイムゾーン変換しない)
+  const m = str.match(/^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/);
   if(!m) return '';
   return m[1] + '-' + String(parseInt(m[2])).padStart(2,'0') + '-' + String(parseInt(m[3])).padStart(2,'0');
 }
@@ -4998,18 +5011,33 @@ function linkReservationToSpot(info){
       }
     });
   });
+  // 契約日が今日以前(過去日)なら「予約」ではなく「使用中」で登録する。
+  // (info.useNow は契約管理側で過去日確認OK時に渡される)
+  const normContract = (typeof normalizeDate === 'function') ? normalizeDate(info.contractDate) : info.contractDate;
+  const todayN = (typeof todayStr === 'function') ? todayStr() : new Date().toISOString().slice(0,10);
+  const isPastOrToday = !!(normContract && normContract <= todayN);
+  const useNow = !!(info.useNow && isPastOrToday);
   targets.forEach(t => {
-    t.res_user = info.contractor;
-    // 予約日は input[type=date] が確実に表示できる YYYY-MM-DD 形式に正規化して書き込む。
-    // (契約日が "2026/06/25" 等の形式でも、ここで "2026-06-25" に揃える)
-    const normDate = (typeof normalizeDate === 'function') ? normalizeDate(info.contractDate) : info.contractDate;
-    t.res_date = normDate || info.contractDate;
-    writtenDate = t.res_date;
-    if(info.srcKey) t.res_srcKey = info.srcKey;
-    if(info.room){
-      const sp = splitTouRoom(info.room);
-      t.res_tou = sp.tou;
-      t.res_room = sp.room;
+    if(useNow){
+      // 使用中として登録: メイン行に使用者名を書き込み、状況を「使用中(借)」に。
+      t.user = info.contractor;
+      t.status = '借';
+      // 予約欄は使わないのでクリア(紐づけ解除判定用に res_srcKey だけ残す)
+      delete t.res_user; delete t.res_date; delete t.res_tou; delete t.res_room; delete t.res_price; delete t.res_note;
+      if(info.srcKey) t.res_srcKey = info.srcKey;
+      writtenDate = normContract || info.contractDate;
+      if(info.room){ const sp = splitTouRoom(info.room); if(!t.tou) t.tou = sp.tou; if(!t.room) t.room = sp.room; }
+    } else {
+      t.res_user = info.contractor;
+      const normDate = (typeof normalizeDate === 'function') ? normalizeDate(info.contractDate) : info.contractDate;
+      t.res_date = normDate || info.contractDate;
+      writtenDate = t.res_date;
+      if(info.srcKey) t.res_srcKey = info.srcKey;
+      if(info.room){
+        const sp = splitTouRoom(info.room);
+        t.res_tou = sp.tou;
+        t.res_room = sp.room;
+      }
     }
   });
   saveAll(all);
@@ -5026,7 +5054,7 @@ function linkReservationToSpot(info){
       if(isOpen){ openModal(bld.id); }
     }
   }catch(e){}
-  return { ok:true, bldName: bldName, no: targets.map(t=>t.no).join('・'), count: targets.length, resDate: writtenDate };
+  return { ok:true, bldName: bldName, no: targets.map(t=>t.no).join('・'), count: targets.length, resDate: writtenDate, useNow: useNow };
 }
 // 契約管理(別IIFE)から呼べるよう公開
 window.PV_linkReservation = linkReservationToSpot;
@@ -9683,19 +9711,38 @@ function linkCurrentToSpot(){
   // 予約に反映する名前: 駐車場契約者があればそれ、空なら契約者名(法人名)
   const resName = (c.type === '法人' && c.carContractor && c.carContractor.trim())
     ? c.carContractor.trim() : c.contractor;
+  // 契約日が今日以前(過去日)なら確認の上「使用中」で登録する
+  const cdRaw = String(c.contractDate||'').trim();
+  let cdN = '';
+  const cm = cdRaw.match(/^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/);
+  if(cm){ cdN = cm[1] + '-' + String(parseInt(cm[2])).padStart(2,'0') + '-' + String(parseInt(cm[3])).padStart(2,'0'); }
+  const _t = new Date();
+  const todayN = _t.getFullYear() + '-' + String(_t.getMonth()+1).padStart(2,'0') + '-' + String(_t.getDate()).padStart(2,'0');
+  let useNow = false;
+  if(cdN && cdN <= todayN){
+    if(!confirm('契約日(' + cdN + ')は今日以前の日付です。よろしいですか?\n\nOK: 予約ではなく「使用中」として区画に登録します(使用者名も記入)。\nキャンセル: 中止します。')){
+      return;
+    }
+    useNow = true;
+  }
   const res = window.PV_linkReservation({
     property: c.property,
     parking: c.parking,
     room: c.room,
     contractor: resName,
     contractDate: c.contractDate,
-    srcKey: c.id
+    srcKey: c.id,
+    useNow: useNow
   });
   if(res && res.ok){
     _autoSaveWasLinkable = true;
     const noStr = String(res.no).split('・').map(n => 'P'+String(n).padStart(2,'0')).join('・');
     const cntStr = (res.count && res.count > 1) ? ('(' + res.count + '区画)') : '';
-    alert('「'+res.bldName+'」' + noStr + cntStr + ' の予約欄に予約中として登録しました。\n予約日: ' + (res.resDate || '') + '(契約確定日と同じ日付で登録)');
+    if(res.useNow){
+      alert('「'+res.bldName+'」' + noStr + cntStr + ' を「使用中」として登録しました。\n使用開始日: ' + (res.resDate || '') + '\n使用者: ' + resName);
+    } else {
+      alert('「'+res.bldName+'」' + noStr + cntStr + ' の予約欄に予約中として登録しました。\n予約日: ' + (res.resDate || '') + '(契約確定日と同じ日付で登録)');
+    }
   } else if(res && res.reason === 'cancelled'){
     /* ユーザーが確認ダイアログでキャンセル: 何もしない */
   } else if(res && res.reason === 'already'){
