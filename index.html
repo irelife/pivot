@@ -8617,22 +8617,27 @@ function onCardStatusChange(event, id){
   if(!c){ return; }
   if(val === 'cancel' || val === 'rejected'){
     const lbl = (val === 'cancel') ? 'キャンセル' : '審査落ち';
-    // グレー化。完了タブへの移動・申込復活はカード上のボタンで行う
-    c.dealStatus = val;
-    saveAll(all);
-    renderAll();
-    // 紐づいている駐車場予約があるときだけ「削除しますか?」を確認(無ければ聞かない)
-    try{
-      const info = { contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking };
-      if(typeof window.PV_unlinkReservation === 'function'
-         && typeof window.PV_hasReservation === 'function'
-         && window.PV_hasReservation(info)){
-        if(confirm('「' + (c.property||'契約') + '」を' + lbl + 'にしました。\n紐づいている駐車場予約も削除しますか?')){
-          const r = window.PV_unlinkReservation(info);
-          if(r && r.removed > 0){ toast('駐車場予約も削除しました'); }
-        }
+    const info = { contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking };
+    const hasRes = (typeof window.PV_hasReservation === 'function') ? window.PV_hasReservation(info) : false;
+    if(hasRes && typeof window.PV_unlinkReservation === 'function'){
+      // 駐車場予約がある場合のみ確認。OK=変更&予約削除 / キャンセル=ステータス変更も取り消し
+      const ok = confirm('「' + (c.property||'契約') + '」を' + lbl + 'にします。\n紐づいている駐車場予約も削除しますか?\n\nOK: ' + lbl + 'にして予約も削除\nキャンセル: ' + lbl + 'への変更も取りやめ');
+      if(!ok){
+        // ステータス変更そのものを取り消し → 元の表示に戻す
+        renderAll();
+        return;
       }
-    }catch(e){}
+      c.dealStatus = val;
+      saveAll(all);
+      renderAll();
+      const r = window.PV_unlinkReservation(info);
+      if(r && r.removed > 0){ toast('駐車場予約も削除しました'); }
+    } else {
+      // 予約が無ければ確認なしでそのまま変更
+      c.dealStatus = val;
+      saveAll(all);
+      renderAll();
+    }
   } else {
     // 申込〜契約書類作成完了 などの段階を保存
     const wasCancel = (c.dealStatus === 'cancel' || c.dealStatus === 'rejected');
