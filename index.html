@@ -5061,6 +5061,13 @@ function linkReservationToSpot(info){
         t.res_tou = sp.tou;
         t.res_room = sp.room;
       }
+      // ★ 現在「使用中(借)」で誰かが入っている区画に予約を入れたら、
+      //    予約日(契約確定日)を解約日として「解約中(解)」に切り替える。
+      //    すでに解約中(解)・退去済(退)などの場合はそのまま。
+      if(t.status === '借' && t.user){
+        t.status = '解';
+        if(!t.end_date){ t.end_date = t.res_date; }   // 解約日 = 予約日
+      }
     }
   });
   saveAll(all);
