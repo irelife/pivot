@@ -9699,8 +9699,8 @@ function renderInfoIcons(){
     } else if(!filled){
       valBlock = '<span class="info-ico-val empty">未入力</span>';
     } else if(f.key === 'property'){
-      const p = esc(gv('f-property')), r = gv('f-room');
-      valBlock = '<span class="info-ico-val">' + p + (r ? '<br>' + esc(r) + '号' : '') + '</span>';
+      const p = esc(gv('f-property')), t = gv('f-tou'), r = gv('f-room');
+      valBlock = '<span class="info-ico-val">' + p + (t ? '<br>' + esc(t) + '棟' : '') + (r ? (t ? ' ' : '<br>') + esc(r) + '号' : '') + '</span>';
     } else if(f.key === 'agency'){
       const bk = gv('f-broker'), st = gv('f-staff');
       const lines = [bk, st].filter(Boolean).map(x => esc(x)).join('<br>');
