@@ -4929,17 +4929,36 @@ function linkReservationToSpot(info){
   const blds = Object.values(all);
   const norm = s => String(s||'').replace(/\s+/g,'').trim();
   const wp = norm(wantProp);
-  // 物件を特定(完全一致優先→部分一致)。区画は後でこの物件の中から番号ごとに探す。
+  // 物件を特定する。
+  //  ① 完全一致を最優先
+  //  ② 部分一致が複数ある場合は、希望する区画番号(wantNos)を最も多く持つ物件を選ぶ
+  //     (同名・似名の別棟がある場合に、P6だけ別棟へ等の取り違えを防ぐ)
+  const countHas = (b) => {
+    if(!b || !Array.isArray(b.spots)) return 0;
+    let c = 0;
+    wantNos.forEach(no => { if(b.spots.some(sp => parseNo(sp.no) === no)) c++; });
+    return c;
+  };
   let bld = null;
-  for(const b of blds){
-    if(b && norm(b.name) === wp){ bld = b; break; }
+  // ① 完全一致(複数あれば区画を多く持つ方)
+  let exactCands = blds.filter(b => b && norm(b.name) === wp);
+  if(exactCands.length){
+    bld = exactCands.sort((a,b) => countHas(b) - countHas(a))[0];
   }
+  // ② 部分一致(区画番号を最も多く持つ物件を採用)
   if(!bld){
-    for(const b of blds){
-      if(!b) continue;
-      const nb = norm(b.name);
-      if(!nb) continue;
-      if(nb.includes(wp) || wp.includes(nb)){ bld = b; break; }
+    let partialCands = blds.filter(b => {
+      if(!b) return false; const nb = norm(b.name);
+      return nb && (nb.includes(wp) || wp.includes(nb));
+    });
+    if(partialCands.length){
+      partialCands.sort((a,b) => {
+        const d = countHas(b) - countHas(a);
+        if(d !== 0) return d;
+        // 同点なら名前が短い(より一致度が高い)方を優先
+        return norm(a.name).length - norm(b.name).length;
+      });
+      bld = partialCands[0];
     }
   }
   if(!bld || !Array.isArray(bld.spots)){
