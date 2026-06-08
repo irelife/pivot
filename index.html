@@ -2591,6 +2591,7 @@ function applyAutoSwitch(targets){
         delete s.res_note;
         delete s.end_date;
         delete s.res_srcKey;
+        delete s.res_autoCancel;
         count++;
       }
     });
@@ -4889,13 +4890,35 @@ function linkReservationToSpot(info){
     const m = String(v||'').match(/\d+/);
     return m ? parseInt(m[0], 10) : null;
   };
-  // 区画番号を複数解釈する。例: "8-9" "8,9" "8 9" "P8-P9" → [8, 9]
-  // ハイフン/カンマ/スペース/全角ハイフンなどを区切りとして、含まれる数字をすべて拾う。
+  // 区画番号を複数解釈する。区切りで意味が変わる:
+  //  ・ハイフン "8-9" "8〜9" → 連番(8,9)に展開
+  //  ・中黒/カンマ/スペース "6・9" "6,9" "6 9" → その番号だけ(間は含めない)
+  //  ・混在 "1・5-7" → 1,5,6,7
   const parseNoList = (v) => {
-    const nums = String(v||'').match(/\d+/g) || [];
-    const list = nums.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
-    // 重複を除去
-    return list.filter((n, i) => list.indexOf(n) === i);
+    const s = String(v||'').replace(/[ＰｐP\-－―ー〜～]/g, m => {
+      // 全角ハイフン・波ダッシュ類は半角ハイフンへ。P/Ｐは除去用に空白化。
+      if(/[ＰｐP]/.test(m)) return ' ';
+      if(/[〜～]/.test(m)) return '-';
+      return '-';
+    });
+    // 中黒・カンマ・スペースで「グループ」に分割
+    const groups = s.split(/[・,，、\s]+/).filter(Boolean);
+    const out = [];
+    groups.forEach(g => {
+      const range = g.match(/^(\d+)\s*-\s*(\d+)$/);  // 連番指定
+      if(range){
+        let a = parseInt(range[1],10), b = parseInt(range[2],10);
+        if(!isNaN(a) && !isNaN(b)){
+          if(a > b){ const t=a; a=b; b=t; }
+          for(let n=a; n<=b; n++) out.push(n);
+        }
+      } else {
+        const m = g.match(/\d+/);
+        if(m) out.push(parseInt(m[0],10));
+      }
+    });
+    // 重複除去
+    return out.filter((n,i) => out.indexOf(n) === i);
   };
   const wantNos = parseNoList(info.parking);
   const wantProp = String(info.property||'').trim();
@@ -5033,6 +5056,8 @@ function linkReservationToSpot(info){
       const bySrc  = !!(srcKey && sp.res_srcKey && sp.res_srcKey === srcKey);
       const byName = !srcKey && sameBuilding && !!(contractor && sp.res_user && sp.res_user === contractor);
       if(bySrc || byName){
+        if(sp.res_autoCancel && sp.status === '解'){ sp.status = '借'; delete sp.end_date; }
+        delete sp.res_autoCancel;
         delete sp.res_user; delete sp.res_date; delete sp.res_srcKey;
         delete sp.res_tou; delete sp.res_room; delete sp.res_price; delete sp.res_note;
       }
@@ -5071,6 +5096,7 @@ function linkReservationToSpot(info){
       if(t.status === '借' && t.user){
         t.status = '解';
         if(!t.end_date){ t.end_date = t.res_date; }   // 解約日 = 予約日
+        t.res_autoCancel = true;   // この予約によって解約中にしたという目印(キャンセル時に戻す)
       }
     }
   });
@@ -5120,6 +5146,13 @@ function unlinkReservationFromSpots(info){
       const bySrc  = !!(srcKey && s.res_srcKey && s.res_srcKey === srcKey);
       const byName = !!(s.res_user && ((contractor && s.res_user === contractor) || (carName && s.res_user === carName)));
       if(bySrc || byName){
+        // この予約によって解約中(解)にしていた場合は、使用中(借)に戻す。
+        // (もともと解約中だった区画=res_autoCancelが無い場合は、そのまま)
+        if(s.res_autoCancel && s.status === '解'){
+          s.status = '借';
+          delete s.end_date;
+        }
+        delete s.res_autoCancel;
         delete s.res_user; delete s.res_date; delete s.res_srcKey;
         delete s.res_tou; delete s.res_room; delete s.res_price; delete s.res_note;
         removed++;
