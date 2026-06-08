@@ -1658,6 +1658,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
       <!-- 実際の入力欄(非表示・データ保持用) -->
       <div class="hidden-fields" style="display:none;">
         <input type="text" id="f-property">
+        <input type="text" id="f-tou">
         <input type="text" id="f-room">
         <input type="text" id="f-parking" oninput="KB.renderSheetItemSummary()">
         <input type="text" id="f-contractor">
@@ -4966,13 +4967,19 @@ function linkReservationToSpot(info){
       msg:'「'+wantProp+'」が物件管理に見つかりませんでした。\n物件名が物件管理側と一致しているか確認してください。' };
   }
   const bldName = bld.name || wantProp;
-  // 各番号に対応する区画を集める
+  // 各番号に対応する区画を集める。棟(info.tou)が指定されていれば、同じ棟の区画を優先する。
+  const wantTou = String(info.tou || '').trim();
   const targets = [];
   const missing = [];
   wantNos.forEach(no => {
-    const idx = bld.spots.findIndex(sp => parseNo(sp.no) === no);
-    if(idx >= 0){ targets.push(bld.spots[idx]); }
-    else { missing.push(no); }
+    const matches = bld.spots.filter(sp => parseNo(sp.no) === no);
+    if(matches.length === 0){ missing.push(no); return; }
+    let pick = matches[0];
+    if(wantTou){
+      const sameTou = matches.find(sp => String(sp.tou||'').trim() === wantTou);
+      if(sameTou) pick = sameTou;
+    }
+    targets.push(pick);
   });
   if(targets.length === 0){
     return { ok:false, reason:'not-found',
@@ -5217,6 +5224,28 @@ function hasLinkedReservation(info){
   return found;
 }
 window.PV_hasReservation = hasLinkedReservation;
+
+// ある物件名にマッチする物件の「棟」一覧を返す(契約側の棟プルダウン用)
+//  物件名は完全一致優先→部分一致。spots の tou と、棟マスター(_touAddrs)、メイン棟ラベルを統合。
+function getTouListForProperty(propertyName){
+  const wp = String(propertyName||'').replace(/\s+/g,'').trim();
+  if(!wp) return [];
+  const all = loadAll();
+  const blds = Object.values(all).filter(Boolean);
+  const norm = s => String(s||'').replace(/\s+/g,'').trim();
+  // マッチする物件をすべて集める(同名別棟も考慮)
+  let cands = blds.filter(b => norm(b.name) === wp);
+  if(!cands.length){ cands = blds.filter(b => { const nb = norm(b.name); return nb && (nb.includes(wp) || wp.includes(nb)); }); }
+  const set = [];
+  const add = (t) => { const v = String(t||'').trim(); if(v && !set.includes(v)) set.push(v); };
+  cands.forEach(b => {
+    if(Array.isArray(b.spots)) b.spots.forEach(s => { if(s && s.tou) add(s.tou); });
+    if(Array.isArray(b.touAddrs)) b.touAddrs.forEach(ta => add(ta && ta.tou));
+    if(b.mainTou) add(b.mainTou);
+  });
+  return set;
+}
+window.PV_getTouList = getTouListForProperty;
 
 
 
@@ -8526,6 +8555,7 @@ function renderCard(c){
   const roomNo = c.room ? String(c.room).replace(/^P/i, '') : '';
   const pkg = c.parking ? String(c.parking) : '';
   let titleLine = '<span class="t-prop">' + esc(c.property || '(物件未入力)') + '</span>';
+  if(c.tou) titleLine += '<span class="t-room">' + esc(c.tou) + '棟</span>';
   if(roomNo) titleLine += '<span class="t-room">' + esc(roomNo) + '号</span>';
   if(pkg) titleLine += '<span class="t-park">P' + esc(pkg.replace(/^P[-\s]?/i,'')) + '</span>';
 
@@ -8670,7 +8700,7 @@ function maybeRestoreReservation(c){
         const resName = (c.type === '法人' && c.carContractor && c.carContractor.trim())
           ? c.carContractor.trim() : c.contractor;
         const r = window.PV_linkReservation({
-          property: c.property, parking: c.parking, room: c.room,
+          property: c.property, tou: c.tou, parking: c.parking, room: c.room,
           contractor: resName, contractDate: c.contractDate, srcKey: c.id,
           silent: true
         });
@@ -9623,8 +9653,8 @@ const INFO_ICON = {
 const INFO_FIELDS = [
   { key:'property', icon:'building', label:'物件',
     wide:true,
-    inputs:[{id:'f-property', label:'物件名', type:'text'},{id:'f-room', label:'号数', type:'text', ph:'例: 101'}],
-    value:() => { const p=gv('f-property'), r=gv('f-room'); return (p||'') + (r? ' '+r+'号':''); } },
+    inputs:[{id:'f-property', label:'物件名', type:'text'},{id:'f-tou', label:'棟', type:'tou-select', ph:'棟を選択'},{id:'f-room', label:'号数', type:'text', ph:'例: 101'}],
+    value:() => { const p=gv('f-property'), t=gv('f-tou'), r=gv('f-room'); return (p||'') + (t? ' '+t+'棟':'') + (r? ' '+r+'号':''); } },
   { key:'apply',    icon:'apply',    label:'申込日',
     inputs:[{id:'f-applyDate', label:'申込日', type:'date'}],
     value:() => fmtDateVal(gv('f-applyDate')) },
@@ -9748,12 +9778,33 @@ function openInfoEdit(key){
         '<option value="法人"' + (t==='法人'?' selected':'') + '>法人</option>' +
       '</select></div>';
   }
-  bodyHtml += inputs.map(inp =>
-    '<div class="info-edit-row"><label>' + inp.label + '</label>' +
-    '<input type="' + inp.type + '" value="' + esc(gv(inp.id)) + '"' +
-      (inp.ph ? ' placeholder="' + inp.ph + '"' : '') +
-      ' oninput="KB.syncInfoInput(\'' + inp.id + '\', this.value)"></div>'
-  ).join('');
+  bodyHtml += inputs.map(inp => {
+    if(inp.type === 'tou-select'){
+      const propName = gv('f-property');
+      let touList = [];
+      try{ if(typeof window.PV_getTouList === 'function'){ touList = window.PV_getTouList(propName) || []; } }catch(e){}
+      const cur = gv(inp.id);
+      // 現在値が一覧に無ければ加える(手入力済みデータの保持)
+      if(cur && touList.indexOf(cur) < 0){ touList = [cur].concat(touList); }
+      if(touList.length === 0){
+        // 棟が未登録の物件はテキスト入力にフォールバック
+        return '<div class="info-edit-row"><label>' + inp.label + '(任意)</label>' +
+          '<input type="text" value="' + esc(cur) + '"' +
+          (inp.ph ? ' placeholder="' + inp.ph + '"' : '') +
+          ' oninput="KB.syncInfoInput(\'' + inp.id + '\', this.value)"></div>';
+      }
+      const opts = ['<option value="">(棟なし)</option>']
+        .concat(touList.map(t => '<option value="' + esc(t) + '"' + (t===cur?' selected':'') + '>' + esc(t) + '棟</option>'))
+        .join('');
+      return '<div class="info-edit-row"><label>' + inp.label + '</label>' +
+        '<select onchange="KB.syncInfoInput(\'' + inp.id + '\', this.value)" style="padding:9px 12px;font-size:15px;border:1.5px solid #c7c7cc;border-radius:8px;width:100%;font-family:inherit;">' +
+        opts + '</select></div>';
+    }
+    return '<div class="info-edit-row"><label>' + inp.label + '</label>' +
+      '<input type="' + inp.type + '" value="' + esc(gv(inp.id)) + '"' +
+        (inp.ph ? ' placeholder="' + inp.ph + '"' : '') +
+        ' oninput="KB.syncInfoInput(\'' + inp.id + '\', this.value)"></div>';
+  }).join('');
   body.innerHTML = bodyHtml;
   ov.classList.add('active');
   renderInfoIcons();
@@ -9821,6 +9872,20 @@ function syncInfoInput(id, val){
   // 契約日・P区画など連動が必要なものはイベントを発火
   if(id === 'f-contractDate'){ onContractDateChange(); }
   if(id === 'f-parking'){ renderSheetItemSummary(); }
+  // 物件名が変わったら、棟プルダウンの候補だけ作り直す(物件ポップアップ表示中のみ・フォーカスは維持)
+  if(id === 'f-property' && _infoEditingKey === 'property'){
+    try{
+      const touSel = document.querySelector('#info-popup-body select[onchange*="f-tou"]');
+      if(touSel){
+        let touList = [];
+        if(typeof window.PV_getTouList === 'function'){ touList = window.PV_getTouList(val) || []; }
+        const cur = gv('f-tou');
+        if(cur && touList.indexOf(cur) < 0){ touList = [cur].concat(touList); }
+        touSel.innerHTML = '<option value="">(棟なし)</option>' +
+          touList.map(t => '<option value="' + esc(t) + '"' + (t===cur?' selected':'') + '>' + esc(t) + '棟</option>').join('');
+      }
+    }catch(e){}
+  }
   renderInfoIcons();
   autoSave();
   // ★ 契約日 または 駐車場(P区画)を「空」にした場合、紐づいている駐車場予約の削除を確認する
@@ -9836,6 +9901,7 @@ function fillForm(c){
   set('f-contractDate', c.contractDate);
   set('f-property', c.property);
   set('f-room', c.room);
+  set('f-tou', c.tou);
   set('f-parking', c.parking);
   set('f-pet', c.pet);
   set('f-contractor', c.contractor);
@@ -9877,6 +9943,7 @@ function buildContractObject(){
     applyDate: get('f-applyDate'),
     contractDate: get('f-contractDate'),
     property: property,
+    tou: get('f-tou'),
     room: get('f-room'),
     parking: get('f-parking'),
     pet: _editingItemValues.pet || '',
@@ -10006,6 +10073,7 @@ function linkCurrentToSpot(){
   }
   const res = window.PV_linkReservation({
     property: c.property,
+    tou: c.tou,
     parking: c.parking,
     room: c.room,
     contractor: resName,
