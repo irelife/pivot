@@ -1899,7 +1899,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
           <label>駐車場の名称</label>
           <input type="text" id="sd-bld-name" readonly style="background:#f5f5f5;">
         </div>
-        <div class="form-field" style="flex:1;max-width:120px;">
+        <div class="form-field" style="flex:1;max-width:120px;display:none;">
           <label>駐車位置番号</label>
           <input type="text" id="sd-spot-no" readonly style="background:#f5f5f5;">
         </div>
@@ -2551,7 +2551,11 @@ function applyAutoSwitch(targets){
     });
 
     group.forEach(t => {
-      const b = all[t.bldId];
+      // 物件は id で探す(オブジェクトのキーと id が一致しない場合に備える)
+      let b = all[t.bldId];
+      if(!b || b.id !== t.bldId){
+        b = Object.values(all).find(x => x && x.id === t.bldId) || b;
+      }
       if(!b || !b.spots || !b.spots[t.spotIdx]) return;
       const s = b.spots[t.spotIdx];
 
@@ -3679,11 +3683,6 @@ function generateShoudakuPrint(data){
         '<td class="label">駐車場の名称</td>' +
         '<td class="val" colspan="3">'+escapeHtml(data.bldName)+'</td>' +
       '</tr>' +
-      /* 駐車位置番号 */
-      '<tr>' +
-        '<td class="label">駐車位置番号</td>' +
-        '<td class="val" colspan="3">'+escapeHtml(data.spotNo)+'</td>' +
-      '</tr>' +
       /* 使用期間: 年月日罫線スタイル */
       '<tr>' +
         '<td class="label">使用期間</td>' +
@@ -3714,7 +3713,7 @@ function generateShoudakuPrint(data){
       '</tr>' +
       /* 承諾者(貸主) */
       '<tr>' +
-        '<td class="label">承諾者<br>（貸主）</td>' +
+        '<td class="label">承諾者</td>' +
         '<td class="val val-person" colspan="3">' +
           '<div class="row-zip">〒（' + (cmp.zip ? escapeHtml(cmp.zip) : '　　　－　　　　') + '）</div>' +
           '<div class="row-line"><span class="row-label">住　所</span>'+escapeHtml(cmp.addr || '')+'</div>' +
@@ -8969,20 +8968,7 @@ function updateDoneSelCount(){
 }
 
 // ホバーで編集フォームを開く(PCのみ・ドラッグ中は無視・誤反応防止に短い遅延)
-function onCardHover(event, id){
-  if(!_canHover) return;        // タッチ端末ではホバー無効(クリックで開く)
-  if(_draggingId) return;       // ドラッグ中は開かない
-  if(Date.now() < _suppressHoverUntil) return; // 閉じた直後は抑制
-  // 完了カード(未アーカイブ)はホバーでシートを開かず「完了タブへ移動」ボタンを使わせる
-  const c = loadAll()[id];
-  if(c && !c.archived && isContractComplete(c)) return;
-  clearTimeout(_hoverTimer);
-  _hoverTimer = setTimeout(() => {
-    if(_draggingId) return;
-    if(document.getElementById('sheet').classList.contains('active')) return; // 既に開いていれば何もしない
-    openSheet(id);
-  }, 180);
-}
+function onCardHover(event, id){ /* ホバーでの自動オープンは無効化(クリックで開く) */ }
 function onCardLeave(event){ clearTimeout(_hoverTimer); }
 
 // クリック/タップでも開く(ドラッグ直後は無視)
