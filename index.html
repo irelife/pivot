@@ -1650,7 +1650,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
   <div class="board" id="board"></div>
 </div>
 
-<div class="sheet-backdrop" id="sheet-backdrop" onclick="KB.closeSheet()"></div>
+<div class="sheet-backdrop" id="sheet-backdrop"></div>
 <div class="sheet" id="sheet">
   <div class="sheet-grabber"></div>
   <div class="sheet-header">
@@ -1754,6 +1754,13 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #kintai-view *{box-sizing:border-box;}
   #kintai-view h1{font-size:1.3rem;font-weight:700;letter-spacing:.04em;margin:0 0 2px;}
   #kintai-view .kt-sub{color:var(--kt-muted);font-size:.8rem;margin-bottom:20px;}
+  #kintai-view .kt-save-status{
+    display:inline-block;margin-left:10px;padding:2px 10px;border-radius:999px;
+    font-size:.72rem;font-weight:700;background:var(--kt-accent-soft);color:var(--kt-accent);
+    transition:background .2s,color .2s,opacity .3s;vertical-align:middle;
+  }
+  #kintai-view .kt-save-status[data-state="saving"]{background:#fff3e0;color:#a14a3a;}
+  #kintai-view .kt-save-status[data-state="saved"]{background:var(--kt-accent);color:#fff;}
   #kintai-view .kt-clock{
     background:#fff;border:1px solid var(--kt-line);border-radius:14px;
     padding:22px;text-align:center;margin-bottom:18px;
@@ -1793,7 +1800,9 @@ body.tab-kanban .kb-toolbar { display:flex; }
   </style>
 
   <h1>勤怠管理</h1>
-  <div class="kt-sub">打刻制・出退勤のみ／月単位でCSV出力</div>
+  <div class="kt-sub">打刻制・出退勤のみ／月単位でCSV出力
+    <span id="kt-save-status" class="kt-save-status">✓ 自動保存されます</span>
+  </div>
 
   <div class="kt-clock">
     <div class="kt-now-date" id="kt-nowDate"></div>
@@ -8200,11 +8209,24 @@ function switchApp(which){
   const WD = ["日","月","火","水","木","金","土"];
 
   function load(){ try{ return JSON.parse(localStorage.getItem(KEY)||"{}"); }catch(e){ return {}; } }
+  let _ktSaveTimer=null;
+  function setSaveStatus(state){
+    const el=document.getElementById("kt-save-status");
+    if(!el) return;
+    if(state==="saving"){ el.dataset.state="saving"; el.textContent="⏳ 保存中…"; }
+    else if(state==="saved"){
+      el.dataset.state="saved"; el.textContent="✅ 保存しました";
+      clearTimeout(_ktSaveTimer);
+      _ktSaveTimer=setTimeout(()=>{ el.dataset.state=""; el.textContent="✓ 自動保存されます"; }, 1600);
+    }
+  }
   function save(d){
+    setSaveStatus("saving");
     localStorage.setItem(KEY, JSON.stringify(d));
     // PIVOTのクラウド同期に勤怠も載せる
     try{ if(typeof window.__pushNow === 'function'){ window.__pushNow(); }
          else if(typeof window.__scheduleAutoPush === 'function'){ window.__scheduleAutoPush(); } }catch(e){}
+    setSaveStatus("saved");
   }
 
   // data shape: { "2026-06-11": {in:"09:02", out:"18:30"}, ... }
@@ -10442,30 +10464,14 @@ renderAll();
 document.getElementById('preview-backdrop').addEventListener('click', () => hidePreview());
 document.getElementById('done-backdrop').addEventListener('click', () => closeDoneModal());
 // Escで閉じる
-document.addEventListener('keydown', (e) => { if(e.key === 'Escape'){ hidePreview(); closeDoneModal(); closeSheet(); } });
+document.addEventListener('keydown', (e) => { if(e.key === 'Escape'){ hidePreview(); closeDoneModal(); } });
 
 // 編集シートからカーソルが外れたら閉じる(PCのみ・少し待って誤作動防止・戻れば取消)
 let _sheetLeaveTimer = null;
 let _sheetOpenedAt = 0;
 (function bindSheetAutoClose(){
-  const sheet = document.getElementById('sheet');
-  if(!sheet || !_canHover) return;
-  document.addEventListener('mousemove', (e) => {
-    if(!sheet.classList.contains('active')) return;
-    if(Date.now() - _sheetOpenedAt < 800) return;   // 開いた直後は猶予(シートへ移動する時間)
-    const r = sheet.getBoundingClientRect();
-    const m = 30;  // 少しの余白を許容
-    const inside = e.clientX >= r.left - m && e.clientX <= r.right + m &&
-                   e.clientY >= r.top - m  && e.clientY <= r.bottom + m;
-    if(inside){
-      clearTimeout(_sheetLeaveTimer); _sheetLeaveTimer = null;
-    } else if(!_sheetLeaveTimer){
-      _sheetLeaveTimer = setTimeout(() => {
-        _sheetLeaveTimer = null;
-        if(sheet.classList.contains('active')) closeSheet();
-      }, 400);
-    }
-  });
+  // マウスがシート外に出ても自動で閉じない。閉じるのは「閉じる」「×」ボタンのみ。
+  return;
 })();
 
 
