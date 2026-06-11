@@ -596,8 +596,12 @@
 .app-tab.active { background:#fff; color:#111; }
 .app-tab.active:hover { background:#111; color:#fff; }
 #kb-view { display:none; }
+#kintai-view { display:none; }
 body.tab-kanban #pivot-view { display:none; }
 body.tab-kanban #kb-view { display:block; }
+body.tab-kintai #pivot-view { display:none; }
+body.tab-kintai #kb-view { display:none; }
+body.tab-kintai #kintai-view { display:block; }
 .pivot-logo-link { cursor:pointer; }
 /* 契約管理ツールバー(タブバー内): 契約管理タブのときだけ表示 */
 .kb-toolbar { display:none; align-items:center; gap:8px; margin-left:14px; }
@@ -1566,6 +1570,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
   <span id="sync-status" style="display:none;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;background:#f0f0f3;color:#555;margin-left:6px;white-space:nowrap;" title="クラウド同期の状態"></span>
   <button class="app-tab active" id="tab-pivot" onclick="switchApp('pivot')">Property Management</button>
   <button class="app-tab" id="tab-kanban" onclick="switchApp('kanban')">Contract Management</button>
+  <button class="app-tab" id="tab-kintai" onclick="switchApp('kintai')">勤怠管理</button>
   <!-- 契約管理のツールバー(タブバー内・契約管理タブ表示時のみ) -->
   <div class="kb-toolbar" id="kb-toolbar">
     <input type="text" id="kb-search" class="search-input" placeholder="物件名・契約者で検索" oninput="KB.renderAll()">
@@ -1735,6 +1740,85 @@ body.tab-kanban .kb-toolbar { display:flex; }
   <div class="done-body" id="done-body"></div>
 </div>
 </div><!-- /#kb-view -->
+
+<!-- ===== 勤怠管理ビュー (pivot_kintai_v1) ===== -->
+<div id="kintai-view">
+  <style>
+  #kintai-view{
+    --kt-ink:#1f2421; --kt-paper:#f7f5ef; --kt-line:#d9d4c7;
+    --kt-accent:#3f6b4c; --kt-accent-soft:#e6efe7; --kt-muted:#7c776b; --kt-warn:#a14a3a;
+    max-width:760px; margin:0 auto; padding:20px 20px 60px;
+    color:var(--kt-ink); line-height:1.6;
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,sans-serif;
+  }
+  #kintai-view *{box-sizing:border-box;}
+  #kintai-view h1{font-size:1.3rem;font-weight:700;letter-spacing:.04em;margin:0 0 2px;}
+  #kintai-view .kt-sub{color:var(--kt-muted);font-size:.8rem;margin-bottom:20px;}
+  #kintai-view .kt-clock{
+    background:#fff;border:1px solid var(--kt-line);border-radius:14px;
+    padding:22px;text-align:center;margin-bottom:18px;
+  }
+  #kintai-view .kt-now-date{font-size:.9rem;color:var(--kt-muted);}
+  #kintai-view .kt-now-time{font-size:2.6rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.02em;}
+  #kintai-view .kt-btns{display:flex;gap:12px;margin-top:16px;}
+  #kintai-view .kt-btns button{
+    flex:1;padding:16px;border:none;border-radius:11px;font-size:1.05rem;
+    font-weight:700;cursor:pointer;transition:transform .05s, opacity .2s;font-family:inherit;
+  }
+  #kintai-view .kt-btns button:active{transform:scale(.97);}
+  #kintai-view .kt-btn-in{background:var(--kt-accent);color:#fff;}
+  #kintai-view .kt-btn-out{background:#fff;color:var(--kt-accent);border:1.5px solid var(--kt-accent);}
+  #kintai-view .kt-btns button:disabled{opacity:.38;cursor:not-allowed;}
+  #kintai-view .kt-today-status{margin-top:12px;font-size:.85rem;color:var(--kt-muted);}
+  #kintai-view .kt-bar{display:flex;align-items:center;gap:10px;margin:18px 0 10px;}
+  #kintai-view .kt-bar h2{font-size:1rem;font-weight:700;}
+  #kintai-view .kt-bar select,#kintai-view .kt-bar button{
+    font-family:inherit;font-size:.85rem;padding:7px 10px;
+    border:1px solid var(--kt-line);border-radius:8px;background:#fff;color:var(--kt-ink);cursor:pointer;
+  }
+  #kintai-view .kt-bar .kt-spacer{flex:1;}
+  #kintai-view .kt-btn-csv{background:var(--kt-accent-soft);border-color:var(--kt-accent);color:var(--kt-accent);font-weight:700;}
+  #kintai-view table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--kt-line);border-radius:12px;overflow:hidden;font-size:.85rem;}
+  #kintai-view th,#kintai-view td{padding:9px 8px;text-align:center;border-bottom:1px solid var(--kt-line);}
+  #kintai-view th{background:#efece3;font-weight:700;font-size:.78rem;color:var(--kt-muted);}
+  #kintai-view td input[type=time]{font-family:inherit;font-size:.85rem;border:1px solid transparent;background:transparent;border-radius:5px;padding:3px;width:78px;text-align:center;}
+  #kintai-view td input[type=time]:hover{border-color:var(--kt-line);}
+  #kintai-view td input[type=time]:focus{border-color:var(--kt-accent);outline:none;background:#fff;}
+  #kintai-view tr.kt-sat td:first-child{color:#3a6ea1;}
+  #kintai-view tr.kt-sun td:first-child{color:var(--kt-warn);}
+  #kintai-view .kt-work{font-variant-numeric:tabular-nums;}
+  #kintai-view tfoot td{background:#efece3;font-weight:700;}
+  #kintai-view .kt-note{color:var(--kt-muted);font-size:.74rem;margin-top:12px;line-height:1.5;}
+  #kintai-view .kt-del{color:var(--kt-warn);cursor:pointer;font-size:.95rem;border:none;background:none;}
+  </style>
+
+  <h1>勤怠管理</h1>
+  <div class="kt-sub">打刻制・出退勤のみ／月単位でCSV出力</div>
+
+  <div class="kt-clock">
+    <div class="kt-now-date" id="kt-nowDate"></div>
+    <div class="kt-now-time" id="kt-nowTime">--:--:--</div>
+    <div class="kt-btns">
+      <button class="kt-btn-in" id="kt-btnIn">出勤</button>
+      <button class="kt-btn-out" id="kt-btnOut">退勤</button>
+    </div>
+    <div class="kt-today-status" id="kt-todayStatus"></div>
+  </div>
+
+  <div class="kt-bar">
+    <h2>月次記録</h2>
+    <div class="kt-spacer"></div>
+    <select id="kt-monthSel"></select>
+    <button class="kt-btn-csv" id="kt-btnCsv">CSV出力</button>
+  </div>
+
+  <div id="kt-tableWrap"></div>
+
+  <div class="kt-note">
+    ※ 出勤・退勤を押すと現在時刻が記録されます。押し忘れたときは表の時刻を直接編集できます。<br>
+    ※ データはこの端末のブラウザ内に保存され、PIVOTのバックアップにも含まれます。CSVは選択中の月の全日を出力します。
+  </div>
+</div><!-- /#kintai-view -->
 
 <!-- モーダル(物件編集) -->
 <div class="modal-overlay" id="modal">
@@ -2737,8 +2821,10 @@ async function doAutoPush(){
     const all = loadAll();
     let contracts = {};
     try{ contracts = JSON.parse(localStorage.getItem('contract_kanban_v2') || '{}'); }catch(e){ contracts = {}; }
+    let kintai = {};
+    try{ kintai = JSON.parse(localStorage.getItem('pivot_kintai_v1') || '{}'); }catch(e){ kintai = {}; }
     const mtime = getLocalMtime() || touchLocalMtime();
-    const r = await postToGas(url, { action:'save', payload:{ buildings: all, contracts: contracts, mtime: mtime } });
+    const r = await postToGas(url, { action:'save', payload:{ buildings: all, contracts: contracts, kintai: kintai, mtime: mtime } });
     if(r && r.ok){
       _hasUnsavedChanges = false;
       setSyncStatus('saved', '✅ 同期済み');
@@ -2767,6 +2853,7 @@ async function autoPullOnStart(){
       const payload = r.payload || {};
       const buildings = payload.buildings || {};
       const contracts = payload.contracts || {};
+      const kintai = payload.kintai || {};
       const cloudMtime = parseInt(payload.mtime || '0', 10) || 0;
       const localMtime = getLocalMtime();
       // 判定: クラウドの方が新しい(または、ローカルにまだ時刻記録がない初回)なら取り込む。
@@ -2779,9 +2866,11 @@ async function autoPullOnStart(){
           localStorage.setItem(STORAGE_KEY, JSON.stringify(buildings));
         }
         localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts || {}));
+        localStorage.setItem('pivot_kintai_v1', JSON.stringify(kintai || {}));
         if(cloudMtime) { try{ localStorage.setItem(MTIME_KEY, String(cloudMtime)); }catch(e){} }
         if(typeof renderAll === 'function') renderAll();
         if(typeof window.KB !== 'undefined' && typeof window.KB.renderAll === 'function'){ try{ window.KB.renderAll(); }catch(e){} }
+        if(typeof window.KT !== 'undefined' && typeof window.KT.reload === 'function'){ try{ window.KT.reload(); }catch(e){} }
         setSyncStatus('saved', '✅ 最新です');
       } else {
         // ローカルが新しい → 取り込まず、こちらをクラウドへ送って揃える
@@ -3074,11 +3163,13 @@ async function loginPull(){
   const contracts = payload.contracts || {};
   localStorage.setItem(STORAGE_KEY, JSON.stringify(buildings));
   localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts));
+  localStorage.setItem('pivot_kintai_v1', JSON.stringify(payload.kintai || {}));
   const cloudMtime = parseInt(payload.mtime || '0', 10) || Date.now();
   try{ localStorage.setItem(MTIME_KEY, String(cloudMtime)); }catch(e){}
   _hasUnsavedChanges = false;
   if(typeof renderAll === 'function') renderAll();
   if(typeof window.KB !== 'undefined' && typeof window.KB.renderAll === 'function'){ try{ window.KB.renderAll(); }catch(e){} }
+  if(typeof window.KT !== 'undefined' && typeof window.KT.reload === 'function'){ try{ window.KT.reload(); }catch(e){} }
   setSyncStatus('saved', '✅ ログイン済み(最新)');
   setTimeout(() => { const e=document.getElementById('sync-status'); if(e && e.dataset.state==='saved') setSyncStatus('idle',''); }, 2500);
 }
@@ -3107,11 +3198,13 @@ async function forcePullLatest(){
       const contracts = payload.contracts || {};
       localStorage.setItem(STORAGE_KEY, JSON.stringify(buildings));
       localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts || {}));
+      localStorage.setItem('pivot_kintai_v1', JSON.stringify(payload.kintai || {}));
       const cloudMtime = parseInt(payload.mtime || '0', 10) || Date.now();
       try{ localStorage.setItem(MTIME_KEY, String(cloudMtime)); }catch(e){}
       _hasUnsavedChanges = false;
       if(typeof renderAll === 'function') renderAll();
       if(typeof window.KB !== 'undefined' && typeof window.KB.renderAll === 'function'){ try{ window.KB.renderAll(); }catch(e){} }
+      if(typeof window.KT !== 'undefined' && typeof window.KT.reload === 'function'){ try{ window.KT.reload(); }catch(e){} }
       setSyncStatus('saved', '✅ 最新です');
       setTimeout(() => { const e=document.getElementById('sync-status'); if(e && e.dataset.state==='saved') setSyncStatus('idle',''); }, 2000);
     } else {
@@ -6436,10 +6529,13 @@ function deleteBld(){
 // ==============================
 function downloadBackup(){
   const all = loadAll();
+  let kintai = {};
+  try{ kintai = JSON.parse(localStorage.getItem('pivot_kintai_v1') || '{}'); }catch(e){}
   const data = {
     version: '1.0',
     exportedAt: new Date().toISOString(),
-    buildings: all
+    buildings: all,
+    kintai: kintai
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -6467,6 +6563,10 @@ function restoreBackup(event){
         return;
       }
       if(saveAll(data.buildings)){
+        if(data.kintai && typeof data.kintai === 'object'){
+          try{ localStorage.setItem('pivot_kintai_v1', JSON.stringify(data.kintai)); }catch(e){}
+          try{ if(window.KT && window.KT.reload) window.KT.reload(); }catch(e){}
+        }
         showToast('✅ ' + count + ' 件を復元しました');
         renderAll();
       }
@@ -8081,14 +8181,169 @@ window.addEventListener('DOMContentLoaded', () => {
 /* ===== タブ切替 ===== */
 function switchApp(which){
   document.body.classList.toggle('tab-kanban', which==='kanban');
-  document.getElementById('tab-pivot').classList.toggle('active', which!=='kanban');
+  document.body.classList.toggle('tab-kintai', which==='kintai');
+  document.getElementById('tab-pivot').classList.toggle('active', which==='pivot');
   document.getElementById('tab-kanban').classList.toggle('active', which==='kanban');
+  document.getElementById('tab-kintai').classList.toggle('active', which==='kintai');
   if(which==='kanban' && window.KB && window.KB.renderAll){ try{ window.KB.renderAll(); }catch(e){} }
+  if(which==='kintai' && window.KT && window.KT.activate){ try{ window.KT.activate(); }catch(e){} }
   // 注意: タブ切替ではクラウドからの取り込み(上書き)を行わない。
   // (取り込むと、入力直後・送信前のデータが古いクラウド内容で上書きされ「消えた・戻った」が起きるため)
   // 未送信の変更があれば送信だけ行う(取り込みはしない)。
   try{ if(typeof window.__pushNow === 'function'){ window.__pushNow(); } }catch(e){}
 }
+
+/* ===== KINTAI (勤怠管理 / namespaced) ===== */
+(function(){
+  const KEY = "pivot_kintai_v1";
+  const PAD = n => String(n).padStart(2,"0");
+  const WD = ["日","月","火","水","木","金","土"];
+
+  function load(){ try{ return JSON.parse(localStorage.getItem(KEY)||"{}"); }catch(e){ return {}; } }
+  function save(d){
+    localStorage.setItem(KEY, JSON.stringify(d));
+    // PIVOTのクラウド同期に勤怠も載せる
+    try{ if(typeof window.__pushNow === 'function'){ window.__pushNow(); }
+         else if(typeof window.__scheduleAutoPush === 'function'){ window.__scheduleAutoPush(); } }catch(e){}
+  }
+
+  // data shape: { "2026-06-11": {in:"09:02", out:"18:30"}, ... }
+  let data = load();
+
+  function todayKey(){ const d=new Date(); return `${d.getFullYear()}-${PAD(d.getMonth()+1)}-${PAD(d.getDate())}`; }
+  function nowHM(){ const d=new Date(); return `${PAD(d.getHours())}:${PAD(d.getMinutes())}`; }
+
+  function tickClock(){
+    const nd=document.getElementById("kt-nowDate"), nt=document.getElementById("kt-nowTime");
+    if(!nd||!nt) return;
+    const d=new Date();
+    nd.textContent = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）`;
+    nt.textContent = `${PAD(d.getHours())}:${PAD(d.getMinutes())}:${PAD(d.getSeconds())}`;
+  }
+
+  function refreshTodayStatus(){
+    const t = data[todayKey()]||{};
+    const st=document.getElementById("kt-todayStatus");
+    if(st) st.textContent = `本日：${t.in?`出勤 ${t.in}`:"出勤 未"} ／ ${t.out?`退勤 ${t.out}`:"退勤 未"}`;
+    const bi=document.getElementById("kt-btnIn"), bo=document.getElementById("kt-btnOut");
+    if(bi) bi.disabled = !!t.in;
+    if(bo) bo.disabled = !t.in || !!t.out;
+  }
+
+  function workMinutes(inHM,outHM){
+    if(!inHM||!outHM) return null;
+    const [ih,im]=inHM.split(":").map(Number), [oh,om]=outHM.split(":").map(Number);
+    let mins=(oh*60+om)-(ih*60+im);
+    if(mins<0) mins+=24*60;
+    return mins;
+  }
+  function fmtWork(mins){ if(mins==null) return "—"; return `${Math.floor(mins/60)}:${PAD(mins%60)}`; }
+
+  function monthKeys(){
+    const set=new Set(Object.keys(data).map(k=>k.slice(0,7)));
+    set.add(todayKey().slice(0,7));
+    return [...set].sort().reverse();
+  }
+  function buildMonths(){
+    const sel=document.getElementById("kt-monthSel"); if(!sel) return;
+    const cur=sel.value;
+    sel.innerHTML="";
+    monthKeys().forEach(m=>{
+      const o=document.createElement("option"); o.value=m;
+      o.textContent=`${m.slice(0,4)}年${m.slice(5,7)}月`;
+      sel.appendChild(o);
+    });
+    sel.value = cur && monthKeys().includes(cur) ? cur : todayKey().slice(0,7);
+  }
+  function daysInMonth(ym){ const [y,m]=ym.split("-").map(Number); return new Date(y,m,0).getDate(); }
+
+  function render(){
+    const sel=document.getElementById("kt-monthSel"); if(!sel) return;
+    const ym=sel.value || todayKey().slice(0,7);
+    const [y,m]=ym.split("-").map(Number);
+    const dim=daysInMonth(ym);
+    let rows="", total=0;
+    for(let d=1; d<=dim; d++){
+      const k=`${ym}-${PAD(d)}`;
+      const wd=new Date(y,m-1,d).getDay();
+      const rec=data[k]||{};
+      const mins=workMinutes(rec.in,rec.out);
+      if(mins!=null) total+=mins;
+      const cls = wd===0?"kt-sun":(wd===6?"kt-sat":"");
+      rows+=`<tr class="${cls}">
+        <td>${m}/${d}<br><span style="font-size:.7rem">(${WD[wd]})</span></td>
+        <td><input type="time" value="${rec.in||""}" data-k="${k}" data-f="in"></td>
+        <td><input type="time" value="${rec.out||""}" data-k="${k}" data-f="out"></td>
+        <td class="kt-work">${fmtWork(mins)}</td>
+        <td>${(rec.in||rec.out)?`<button class="kt-del" data-del="${k}">×</button>`:""}</td>
+      </tr>`;
+    }
+    const wrap=document.getElementById("kt-tableWrap");
+    wrap.innerHTML=`<table>
+      <thead><tr><th>日付</th><th>出勤</th><th>退勤</th><th>勤務</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td colspan="3">合計勤務時間</td><td class="kt-work">${fmtWork(total)}</td><td></td></tr></tfoot>
+    </table>`;
+
+    wrap.querySelectorAll('input[type=time]').forEach(inp=>{
+      inp.onchange=()=>{
+        const k=inp.dataset.k, f=inp.dataset.f;
+        data[k]=data[k]||{};
+        if(inp.value) data[k][f]=inp.value; else delete data[k][f];
+        if(!data[k].in && !data[k].out) delete data[k];
+        save(data); render(); refreshTodayStatus();
+      };
+    });
+    wrap.querySelectorAll('[data-del]').forEach(b=>{
+      b.onclick=()=>{ delete data[b.dataset.del]; save(data); buildMonths(); render(); refreshTodayStatus(); };
+    });
+  }
+
+  function exportCsv(){
+    const ym=document.getElementById("kt-monthSel").value;
+    const [y,m]=ym.split("-").map(Number);
+    const dim=daysInMonth(ym);
+    let csv="\uFEFF日付,曜日,出勤,退勤,勤務時間\n", total=0;
+    for(let d=1; d<=dim; d++){
+      const k=`${ym}-${PAD(d)}`;
+      const wd=new Date(y,m-1,d).getDay();
+      const rec=data[k]||{};
+      const mins=workMinutes(rec.in,rec.out);
+      if(mins!=null) total+=mins;
+      csv+=`${y}/${m}/${d},${WD[wd]},${rec.in||""},${rec.out||""},${fmtWork(mins)==="—"?"":fmtWork(mins)}\n`;
+    }
+    csv+=`合計,,,,"${fmtWork(total)}"\n`;
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download=`勤怠_${y}年${PAD(m)}月.csv`;
+    a.click();
+  }
+
+  let _booted=false, _clockTimer=null;
+  function bind(){
+    const bi=document.getElementById("kt-btnIn"), bo=document.getElementById("kt-btnOut");
+    if(bi) bi.onclick=()=>{ const k=todayKey(); data[k]=data[k]||{}; data[k].in=nowHM(); save(data); buildMonths(); render(); refreshTodayStatus(); };
+    if(bo) bo.onclick=()=>{ const k=todayKey(); data[k]=data[k]||{}; data[k].out=nowHM(); save(data); render(); refreshTodayStatus(); };
+    const sel=document.getElementById("kt-monthSel"); if(sel) sel.onchange=render;
+    const csv=document.getElementById("kt-btnCsv"); if(csv) csv.onclick=exportCsv;
+  }
+
+  // タブが開かれたとき / 初回表示時に呼ぶ
+  function activate(){
+    data = load(); // クラウド復元等で更新されている場合に追従
+    if(!_booted){ bind(); _booted=true; }
+    if(!_clockTimer){ _clockTimer=setInterval(tickClock,1000); }
+    tickClock(); buildMonths(); render(); refreshTodayStatus();
+  }
+
+  // クラウド/バックアップ復元後に外部から呼べるよう公開
+  window.KT = {
+    activate,
+    reload(){ data = load(); if(document.getElementById("kt-monthSel")){ buildMonths(); render(); refreshTodayStatus(); } },
+    getData(){ return load(); }
+  };
+})();
 </script>
 <script>
 /* ===== KANBAN (namespaced) ===== */
