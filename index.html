@@ -2796,6 +2796,7 @@ function getLocalMtime(){
   const v = parseInt(localStorage.getItem(MTIME_KEY) || '0', 10);
   return isNaN(v) ? 0 : v;
 }
+try{ window.__touchLocalMtime = touchLocalMtime; }catch(e){}
 
 // 保存のたびに呼ばれる。更新時刻を進めて、少し待ってから自動送信。
 function scheduleAutoPush(){
@@ -2868,7 +2869,8 @@ async function autoPullOnStart(){
       // 判定: クラウドの方が新しい(または、ローカルにまだ時刻記録がない初回)なら取り込む。
       // 自分のローカルの方が新しい場合は取り込まない(自分の削除・編集を守る)。
       const localHasData = (Object.keys(loadAll()).length > 0) ||
-        (Object.keys((function(){try{return JSON.parse(localStorage.getItem('contract_kanban_v2')||'{}');}catch(e){return {};}})()).length > 0);
+        (Object.keys((function(){try{return JSON.parse(localStorage.getItem('contract_kanban_v2')||'{}');}catch(e){return {};}})()).length > 0) ||
+        (Object.keys((function(){try{return JSON.parse(localStorage.getItem('pivot_kintai_v1')||'{}');}catch(e){return {};}})()).length > 0);
       const shouldPull = (!localHasData) || (cloudMtime > localMtime);
       if(shouldPull){
         if(buildings && Object.keys(buildings).length >= 0){
@@ -8223,6 +8225,8 @@ function switchApp(which){
   function save(d){
     setSaveStatus("saving");
     localStorage.setItem(KEY, JSON.stringify(d));
+    // この端末の更新が最新であることを記録(起動時にクラウドの古いデータで上書きされるのを防ぐ)
+    try{ if(typeof window.__touchLocalMtime === 'function'){ window.__touchLocalMtime(); } }catch(e){}
     // PIVOTのクラウド同期に勤怠も載せる
     try{ if(typeof window.__pushNow === 'function'){ window.__pushNow(); }
          else if(typeof window.__scheduleAutoPush === 'function'){ window.__scheduleAutoPush(); } }catch(e){}
