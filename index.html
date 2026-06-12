@@ -1730,10 +1730,9 @@ body.tab-kanban .kb-toolbar { display:flex; }
   <div class="done-head">
     <h2>✅ 完了済み契約</h2>
     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-      <select id="done-year" onchange="KB.renderDoneList()" title="完了年度で絞り込み(4月始まり)"
-        style="border:1px solid #d9d4c7; background:#fff; color:#333; font-size:13px; font-weight:700; padding:7px 10px; border-radius:999px; cursor:pointer; font-family:inherit;">
-        <option value="">全年度</option>
-      </select>
+      <input type="text" id="done-year" inputmode="numeric" maxlength="4" placeholder="年度 例)2026"
+        oninput="KB.renderDoneList()" title="完了年度で絞り込み(4月始まり)。空欄で全年度"
+        style="width:110px; border:1px solid #d9d4c7; background:#fff; color:#333; font-size:13px; font-weight:700; padding:7px 12px; border-radius:999px; font-family:inherit; text-align:center;">
       <button id="done-csv" onclick="KB.exportSelectedDoneCsv()" title="選択した契約をCSV出力"
         style="border:none; background:#e6efe7; color:#3f6b4c; font-size:13px; font-weight:800; padding:8px 14px; border-radius:999px; cursor:pointer; font-family:inherit; white-space:nowrap;">⬇ CSV出力</button>
       <button id="done-select-all" onclick="KB.toggleSelectAllDone()" title="すべて選択/解除"
@@ -9234,22 +9233,17 @@ function fiscalYearOf(dateStr){
 }
 function renderDoneList(){
   let list = Object.values(loadAll()).filter(c => c.archived);
-  // 年度セレクトの選択肢を構築(完了日の年度一覧・4月始まり)
-  const yearSel = document.getElementById('done-year');
-  const fys = [...new Set(list.map(c => fiscalYearOf(c.archivedAt)).filter(Boolean))].sort().reverse();
-  if(yearSel){
-    const cur = yearSel.value;
-    yearSel.innerHTML = '<option value="">全年度</option>' +
-      fys.map(y => '<option value="' + y + '">' + y + '年度</option>').join('');
-    yearSel.value = (cur && (cur==='' || fys.includes(cur))) ? cur : '';
-  }
-  const fy = yearSel ? yearSel.value : '';
-  if(fy){ list = list.filter(c => fiscalYearOf(c.archivedAt) === fy); }
+  // 年度の手入力(4桁)で絞り込み。空欄なら全年度。
+  const yearInput = document.getElementById('done-year');
+  const fy = yearInput ? String(yearInput.value||'').trim() : '';
+  const fyValid = /^\d{4}$/.test(fy);
+  if(fyValid){ list = list.filter(c => fiscalYearOf(c.archivedAt) === fy); }
   list.sort((a,b) => (b.archivedAt||'').localeCompare(a.archivedAt||''));
   const body = document.getElementById('done-body');
   if(list.length === 0){
     body.innerHTML = '<div class="done-empty">' +
-      (fy ? (fy + '年度に完了した契約はありません。') : 'まだ完了タブに移動した契約はありません。') + '</div>';
+      (fyValid ? (fy + '年度に完了した契約はありません。')
+               : (fy ? '年度は4桁の数字で入力してください（例: 2026）。' : 'まだ完了タブに移動した契約はありません。')) + '</div>';
     updateDoneSelCount();
     return;
   }
@@ -9369,8 +9363,9 @@ function exportSelectedDoneCsv(){
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  const yearSel = document.getElementById('done-year');
-  const fy = yearSel && yearSel.value ? yearSel.value + '年度' : '全年度';
+  const yearInput = document.getElementById('done-year');
+  const fyVal = yearInput ? String(yearInput.value||'').trim() : '';
+  const fy = /^\d{4}$/.test(fyVal) ? fyVal + '年度' : '全年度';
   const today = new Date();
   const stamp = today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0');
   a.download = '完了済み契約_' + fy + '_' + stamp + '.csv';
