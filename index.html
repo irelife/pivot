@@ -2877,7 +2877,16 @@ async function autoPullOnStart(){
           localStorage.setItem(STORAGE_KEY, JSON.stringify(buildings));
         }
         localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts || {}));
-        localStorage.setItem('pivot_kintai_v1', JSON.stringify(kintai || {}));
+        {
+          const cloudKintai = kintai;
+          let localKintai = {};
+          try{ localKintai = JSON.parse(localStorage.getItem('pivot_kintai_v1')||'{}'); }catch(e){ localKintai = {}; }
+          const cloudHasKintai = cloudKintai && typeof cloudKintai === 'object' && Object.keys(cloudKintai).length > 0;
+          const localHasKintai = localKintai && Object.keys(localKintai).length > 0;
+          if(cloudHasKintai){ localStorage.setItem('pivot_kintai_v1', JSON.stringify(cloudKintai)); }
+          else if(localHasKintai){ try{ if(typeof scheduleAutoPush==='function'){ scheduleAutoPush(); } }catch(e){} }
+          else { localStorage.setItem('pivot_kintai_v1', JSON.stringify(cloudKintai || {})); }
+        }
         if(cloudMtime) { try{ localStorage.setItem(MTIME_KEY, String(cloudMtime)); }catch(e){} }
         if(typeof renderAll === 'function') renderAll();
         if(typeof window.KB !== 'undefined' && typeof window.KB.renderAll === 'function'){ try{ window.KB.renderAll(); }catch(e){} }
@@ -3174,7 +3183,23 @@ async function loginPull(){
   const contracts = payload.contracts || {};
   localStorage.setItem(STORAGE_KEY, JSON.stringify(buildings));
   localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts));
-  localStorage.setItem('pivot_kintai_v1', JSON.stringify(payload.kintai || {}));
+  // 勤怠: クラウドが勤怠を保持していない(キー無し or 空)場合は、ローカルの勤怠を消さずに守る。
+  // (クラウド側がまだ勤怠フィールドに未対応でも、この端末の打刻を失わないため)
+  {
+    const cloudKintai = payload.kintai;
+    let localKintai = {};
+    try{ localKintai = JSON.parse(localStorage.getItem('pivot_kintai_v1')||'{}'); }catch(e){ localKintai = {}; }
+    const cloudHasKintai = cloudKintai && typeof cloudKintai === 'object' && Object.keys(cloudKintai).length > 0;
+    const localHasKintai = localKintai && Object.keys(localKintai).length > 0;
+    if(cloudHasKintai){
+      localStorage.setItem('pivot_kintai_v1', JSON.stringify(cloudKintai));
+    } else if(localHasKintai){
+      // クラウドは空だがローカルにある → ローカルを残し、クラウドへ送り直す
+      try{ if(typeof scheduleAutoPush === 'function'){ scheduleAutoPush(); } }catch(e){}
+    } else {
+      localStorage.setItem('pivot_kintai_v1', JSON.stringify(cloudKintai || {}));
+    }
+  }
   const cloudMtime = parseInt(payload.mtime || '0', 10) || Date.now();
   try{ localStorage.setItem(MTIME_KEY, String(cloudMtime)); }catch(e){}
   _hasUnsavedChanges = false;
@@ -3209,7 +3234,16 @@ async function forcePullLatest(){
       const contracts = payload.contracts || {};
       localStorage.setItem(STORAGE_KEY, JSON.stringify(buildings));
       localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts || {}));
-      localStorage.setItem('pivot_kintai_v1', JSON.stringify(payload.kintai || {}));
+      {
+        const cloudKintai = payload.kintai;
+        let localKintai = {};
+        try{ localKintai = JSON.parse(localStorage.getItem('pivot_kintai_v1')||'{}'); }catch(e){ localKintai = {}; }
+        const cloudHasKintai = cloudKintai && typeof cloudKintai === 'object' && Object.keys(cloudKintai).length > 0;
+        const localHasKintai = localKintai && Object.keys(localKintai).length > 0;
+        if(cloudHasKintai){ localStorage.setItem('pivot_kintai_v1', JSON.stringify(cloudKintai)); }
+        else if(localHasKintai){ try{ if(typeof scheduleAutoPush==='function'){ scheduleAutoPush(); } }catch(e){} }
+        else { localStorage.setItem('pivot_kintai_v1', JSON.stringify(cloudKintai || {})); }
+      }
       const cloudMtime = parseInt(payload.mtime || '0', 10) || Date.now();
       try{ localStorage.setItem(MTIME_KEY, String(cloudMtime)); }catch(e){}
       _hasUnsavedChanges = false;
@@ -8210,7 +8244,24 @@ function switchApp(which){
   const PAD = n => String(n).padStart(2,"0");
   const WD = ["日","月","火","水","木","金","土"];
 
-  function load(){ try{ return JSON.parse(localStorage.getItem(KEY)||"{}"); }catch(e){ return {}; } }
+  const BAK = "pivot_kintai_v1_bak";   // 保険: クラウド取込等でメインが消えても復元できる二重保存
+
+  function _parse(s){ try{ return JSON.parse(s||"{}")||{}; }catch(e){ return {}; } }
+  // メインとバックアップのうち、エントリ数が多い方(=より新しく打刻済み)を生かす。
+  // どちらかが空でも、もう片方から自動復元する自己修復ロード。
+  function load(){
+    const main=_parse(localStorage.getItem(KEY));
+    const bak =_parse(localStorage.getItem(BAK));
+    const mN=Object.keys(main).length, bN=Object.keys(bak).length;
+    let merged;
+    if(bN>mN){ merged=bak; }       // バックアップの方が情報が多い → メインが消されていた
+    else { merged=main; }
+    // メイン/バックアップを最新で揃えておく(再読み込みで消えた状態を治す)
+    const js=JSON.stringify(merged);
+    if(JSON.stringify(main)!==js){ try{ localStorage.setItem(KEY, js); }catch(e){} }
+    if(JSON.stringify(bak)!==js){ try{ localStorage.setItem(BAK, js); }catch(e){} }
+    return merged;
+  }
   let _ktSaveTimer=null;
   function setSaveStatus(state){
     const el=document.getElementById("kt-save-status");
@@ -8224,7 +8275,9 @@ function switchApp(which){
   }
   function save(d){
     setSaveStatus("saving");
-    localStorage.setItem(KEY, JSON.stringify(d));
+    const js=JSON.stringify(d);
+    localStorage.setItem(KEY, js);
+    localStorage.setItem(BAK, js);   // 二重保存(保険)
     // この端末の更新が最新であることを記録(起動時にクラウドの古いデータで上書きされるのを防ぐ)
     try{ if(typeof window.__touchLocalMtime === 'function'){ window.__touchLocalMtime(); } }catch(e){}
     // PIVOTのクラウド同期に勤怠も載せる
@@ -8367,8 +8420,13 @@ function switchApp(which){
   window.KT = {
     activate,
     reload(){ data = load(); if(document.getElementById("kt-monthSel")){ buildMonths(); render(); refreshTodayStatus(); } },
+    heal(){ data = load(); if(document.getElementById("kt-monthSel") && document.body.classList.contains('tab-kintai')){ buildMonths(); render(); refreshTodayStatus(); } },
     getData(){ return load(); }
   };
+
+  // 保険: 起動直後にクラウド取込がメインキーを空で上書きしても、
+  // バックアップキーから自動復元する(load内で自己修復)。複数回チェック。
+  [1500, 3500, 6000].forEach(ms => setTimeout(()=>{ try{ window.KT.heal(); }catch(e){} }, ms));
 })();
 </script>
 <script>
