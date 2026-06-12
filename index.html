@@ -1729,7 +1729,13 @@ body.tab-kanban .kb-toolbar { display:flex; }
 <div class="done-modal" id="done-modal" role="dialog" aria-hidden="true">
   <div class="done-head">
     <h2>✅ 完了済み契約</h2>
-    <div style="display:flex; align-items:center; gap:8px;">
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <select id="done-year" onchange="KB.renderDoneList()" title="完了年で絞り込み"
+        style="border:1px solid #d9d4c7; background:#fff; color:#333; font-size:13px; font-weight:700; padding:7px 10px; border-radius:999px; cursor:pointer; font-family:inherit;">
+        <option value="">全期間</option>
+      </select>
+      <button id="done-csv" onclick="KB.exportSelectedDoneCsv()" title="選択した契約をCSV出力"
+        style="border:none; background:#e6efe7; color:#3f6b4c; font-size:13px; font-weight:800; padding:8px 14px; border-radius:999px; cursor:pointer; font-family:inherit; white-space:nowrap;">⬇ CSV出力</button>
       <button id="done-select-all" onclick="KB.toggleSelectAllDone()" title="すべて選択/解除"
         style="border:none; background:#eef0f3; color:#333; font-size:13px; font-weight:800; padding:8px 14px; border-radius:999px; cursor:pointer; font-family:inherit; white-space:nowrap;">☑ 全選択</button>
       <button id="done-del-selected" onclick="KB.deleteSelectedDone()" title="選択した契約を削除"
@@ -9218,11 +9224,24 @@ function closeDoneModal(){
   m.setAttribute('aria-hidden','true');
 }
 function renderDoneList(){
-  const list = Object.values(loadAll()).filter(c => c.archived);
+  let list = Object.values(loadAll()).filter(c => c.archived);
+  // 年セレクトの選択肢を構築(完了年の一覧)
+  const yearSel = document.getElementById('done-year');
+  const years = [...new Set(list.map(c => (c.archivedAt||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  if(yearSel){
+    const cur = yearSel.value;
+    yearSel.innerHTML = '<option value="">全期間</option>' +
+      years.map(y => '<option value="' + y + '">' + y + '年</option>').join('');
+    yearSel.value = (cur && (cur==='' || years.includes(cur))) ? cur : '';
+  }
+  const fy = yearSel ? yearSel.value : '';
+  if(fy){ list = list.filter(c => (c.archivedAt||'').slice(0,4) === fy); }
   list.sort((a,b) => (b.archivedAt||'').localeCompare(a.archivedAt||''));
   const body = document.getElementById('done-body');
   if(list.length === 0){
-    body.innerHTML = '<div class="done-empty">まだ完了タブに移動した契約はありません。</div>';
+    body.innerHTML = '<div class="done-empty">' +
+      (fy ? (fy + '年に完了した契約はありません。') : 'まだ完了タブに移動した契約はありません。') + '</div>';
+    updateDoneSelCount();
     return;
   }
   body.innerHTML = list.map(c => {
@@ -9299,11 +9318,55 @@ function updateDoneSelCount(){
   const sel = checks.filter(ch => ch.checked).length;
   const delBtn = document.getElementById('done-del-selected');
   if(delBtn){ delBtn.textContent = sel > 0 ? ('🗑 選択削除 (' + sel + ')') : '🗑 選択削除'; }
+  const csvBtn = document.getElementById('done-csv');
+  if(csvBtn){ csvBtn.textContent = sel > 0 ? ('⬇ CSV出力 (' + sel + ')') : '⬇ CSV出力'; }
   const allBtn = document.getElementById('done-select-all');
   if(allBtn){
     const allChecked = checks.length > 0 && checks.every(ch => ch.checked);
     allBtn.textContent = allChecked ? '☐ 全解除' : '☑ 全選択';
   }
+}
+
+// 選択した完了済み契約をCSV出力(未選択時は表示中の全件)
+function exportSelectedDoneCsv(){
+  const all = loadAll();
+  const checks = Array.from(document.querySelectorAll('#done-body .di-check'));
+  let ids = checks.filter(ch => ch.checked).map(ch => ch.value);
+  if(ids.length === 0){
+    // 未選択なら、いま画面に表示されている全件(年フィルタ適用後)を出力
+    ids = checks.map(ch => ch.value);
+  }
+  if(ids.length === 0){ toast('出力する契約がありません'); return; }
+
+  const q = v => {
+    const s = (v==null) ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  };
+  const header = ['完了日','種別','申込日','契約日','物件名','部屋番号','契約者','仲介','担当','駐車場',
+    '火災保険','駆け付け','電気','請求書','鍵渡しメール','鍵交換','ペット','契約書送付','電子署名','契約書返送','保証電子印','入金','鍵渡し','ひな形送付済み','備考'];
+  const rows = ids.map(id => {
+    const c = all[id]; if(!c) return null;
+    const done = c.archivedAt ? c.archivedAt.slice(0,10) : '';
+    return [
+      done, c.type||'', c.applyDate||'', c.contractDate||'', c.property||'',
+      (c.room ? String(c.room).replace(/^P/i,'') : ''), c.contractor||'', c.broker||'', c.staff||'', c.parking||'',
+      c.insurance||'', c.rescue||'', c.electric||'', c.invoice||'', c.keyMail||'', c.keyExchange||'',
+      c.pet||'', c.sendDate||'', c.esignDate||'', c.returnDate||'', c.guaranteeDate||'',
+      c.paymentDate||'', c.keyHandover||'', c.hinagata||'', c.memo||''
+    ].map(q).join(',');
+  }).filter(Boolean);
+
+  const csv = '\uFEFF' + header.map(q).join(',') + '\n' + rows.join('\n') + '\n';
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const yearSel = document.getElementById('done-year');
+  const fy = yearSel && yearSel.value ? yearSel.value + '年' : '全期間';
+  const today = new Date();
+  const stamp = today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0');
+  a.download = '完了済み契約_' + fy + '_' + stamp + '.csv';
+  a.click();
+  toast(rows.length + '件をCSV出力しました');
 }
 
 // ホバーで編集フォームを開く(PCのみ・ドラッグ中は無視・誤反応防止に短い遅延)
@@ -10608,6 +10671,7 @@ try{window.KB.renderAll=renderAll;}catch(e){}
 try{window.KB.renderBoard=renderBoard;}catch(e){}
 try{window.KB.renderCard=renderCard;}catch(e){}
 try{window.KB.renderDoneList=renderDoneList;}catch(e){}
+try{window.KB.exportSelectedDoneCsv=exportSelectedDoneCsv;}catch(e){}
 try{window.KB.renderInfoIcons=renderInfoIcons;}catch(e){}
 try{window.KB.renderSheetDateSummary=renderSheetDateSummary;}catch(e){}
 try{window.KB.renderSheetItemSummary=renderSheetItemSummary;}catch(e){}
