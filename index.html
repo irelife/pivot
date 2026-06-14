@@ -2029,9 +2029,11 @@ body.tab-kanban .kb-toolbar { display:flex; }
     <div class="bar">
       <h2>送信履歴</h2>
       <span class="spacer"></span>
+      <button class="btn btn-sm btn-acc" onclick="RENT.checkBounces()">⚠ 配信失敗を確認</button>
       <button class="btn btn-sm btn-warn" onclick="RENT.clearHistory()">履歴を全消去</button>
     </div>
-    <div style="font-size:.8rem;color:var(--rt-muted);margin-bottom:12px;">いつ・どの月分を・どのオーナーに送信したかの記録です（この端末に保存）。</div>
+    <div style="font-size:.8rem;color:var(--rt-muted);margin-bottom:6px;">いつ・どの月分を・どのオーナーに送信したかの記録です（この端末に保存）。</div>
+    <div id="rent-history-status" style="font-size:.82rem;font-weight:700;color:var(--rt-accent-d);min-height:1.2em;margin-bottom:10px;"></div>
     <div id="rent-history-body"></div>
   </div>
 </div>
@@ -8855,6 +8857,13 @@ function buildDetail(pages){
     if(!o) unmatched.push(g.atena);
   }
   detail=[...map.values()];
+  // 取り込んだ月が前回保存分と違うなら、送信済み表示をリセット(別月の引き継ぎ防止)
+  try{
+    const newMonth=(detail[0]&&detail[0].props[0]&&detail[0].props[0].month)||"";
+    const saved=JSON.parse(localStorage.getItem(LS_DETAIL)||"null");
+    const savedMonth=saved&&saved.detail&&saved.detail[0]&&saved.detail[0].props&&saved.detail[0].props[0]?saved.detail[0].props[0].month:"";
+    if(newMonth && savedMonth && newMonth!==savedMonth){ sentSet=new Set(); }
+  }catch(e){}
   saveDetailState();   // 仕分け結果を保存(PDFは含まない・軽量)
   const note=document.getElementById("matchNote");
   const noMail=detail.filter(d=>!d.email).length;
@@ -8882,26 +8891,66 @@ function loadHistory(){
   try{ return JSON.parse(localStorage.getItem(LS_HISTORY)||"[]"); }catch(e){ return []; }
 }
 
+/* 不達(バウンス)アドレスの保存 */
+const LS_BOUNCED = "rent_owner_send_bounced_v1";
+function loadBounced(){
+  try{ return new Set(JSON.parse(localStorage.getItem(LS_BOUNCED)||"[]")); }catch(e){ return new Set(); }
+}
+function saveBounced(set){
+  try{ localStorage.setItem(LS_BOUNCED, JSON.stringify([...set])); }catch(e){}
+}
+
+/* GAS経由: 配信失敗(バウンス)を確認し、不達アドレスを記録 */
+async function checkBounces(){
+  const url=(typeof window.getCloudUrl==='function')?window.getCloudUrl():'';
+  if(!url){ toast("クラウド(GAS)URLが未設定です"); return; }
+  const st=document.getElementById("rent-history-status");
+  const setS=m=>{ if(st)st.textContent=m; };
+  setS("配信失敗を確認中…（受信箱を検索しています）");
+  try{
+    const known=[...new Set(loadHistory().filter(e=>e.kind!=='draft'&&e.to).map(e=>e.to.toLowerCase()))];
+    const r=await window.postToGas(url, { action:'checkBounces', sinceDays:30, knownAddrs:known }, 120000);
+    if(r&&r.ok){
+      const set=new Set((r.bounced||[]).map(a=>(a||"").toLowerCase()));
+      saveBounced(set);
+      const newCount=set.size;
+      setS(newCount? `⚠ 配信失敗 ${newCount} 件を検出しました（赤色で表示）` : "✅ 配信失敗は見つかりませんでした");
+      renderHistory();
+      renderPreview();
+    }else{
+      setS("⚠ 確認失敗: "+((r&&r.message)||"不明なエラー"));
+    }
+  }catch(e){ setS("⚠ エラー: "+e.message); }
+}
+
 /* 送信履歴を月別にまとめて描画 */
 function renderHistory(){
   const box=document.getElementById("rent-history-body");
   if(!box) return;
   const log=loadHistory();
   if(!log.length){ box.innerHTML='<div class="empty">まだ送信履歴はありません。</div>'; return; }
+  const bounced=loadBounced();
   // 月ごとにグループ化(新しい月が上)
   const byMonth={};
   log.forEach(e=>{ const m=e.month||"(月不明)"; (byMonth[m]=byMonth[m]||[]).push(e); });
   const months=Object.keys(byMonth).sort().reverse();
   box.innerHTML=months.map(m=>{
-    const rows=byMonth[m].slice().reverse().map(e=>
-      `<tr><td style="padding:6px 10px;white-space:nowrap;">${esc(e.at)}</td>`+
-      `<td style="padding:6px 10px;font-weight:700;">${esc(e.owner)}</td>`+
-      `<td style="padding:6px 10px;color:var(--rt-muted);">${esc(e.to)}</td>`+
-      `<td style="padding:6px 10px;">${e.kind==='draft'?'下書き':'<span style=\"color:#2c6ea1;font-weight:700;\">送信</span>'}</td></tr>`
-    ).join("");
+    const rows=byMonth[m].slice().reverse().map(e=>{
+      const isBounced=bounced.has((e.to||"").toLowerCase());
+      const rowStyle=isBounced?' style="background:#fdecea;"':'';
+      const kindCell=isBounced
+        ? '<span style="color:#c0392b;font-weight:800;">⚠ 不達</span>'
+        : (e.kind==='draft'?'下書き':'<span style="color:#2c6ea1;font-weight:700;">送信</span>');
+      return `<tr${rowStyle}><td style="padding:6px 10px;white-space:nowrap;">${esc(e.at)}</td>`+
+      `<td style="padding:6px 10px;font-weight:700;${isBounced?'color:#c0392b;':''}">${esc(e.owner)}</td>`+
+      `<td style="padding:6px 10px;color:${isBounced?'#c0392b':'var(--rt-muted)'};">${esc(e.to)}</td>`+
+      `<td style="padding:6px 10px;">${kindCell}</td></tr>`;
+    }).join("");
     const sendCount=byMonth[m].filter(e=>e.kind!=='draft').length;
+    const bouncedCount=byMonth[m].filter(e=>bounced.has((e.to||"").toLowerCase())).length;
     return `<div style="margin-bottom:20px;border:1px solid var(--rt-line);border-radius:10px;overflow:hidden;">`+
-      `<div style="background:var(--rt-soft);padding:10px 14px;font-weight:800;color:var(--rt-accent-d);">${esc(m)} 分　<span style="font-weight:600;font-size:.82rem;color:var(--rt-muted);">送信 ${sendCount} 件</span></div>`+
+      `<div style="background:var(--rt-soft);padding:10px 14px;font-weight:800;color:var(--rt-accent-d);">${esc(m)} 分　<span style="font-weight:600;font-size:.82rem;color:var(--rt-muted);">送信 ${sendCount} 件</span>`+
+      (bouncedCount?` <span style="font-weight:700;font-size:.82rem;color:#c0392b;">／ 不達 ${bouncedCount} 件</span>`:"")+`</div>`+
       `<table style="width:100%;border-collapse:collapse;font-size:.84rem;">`+
       `<thead><tr style="border-bottom:1px solid var(--rt-line);font-size:.76rem;color:var(--rt-muted);">`+
       `<th style="padding:6px 10px;text-align:left;">送信日時</th><th style="padding:6px 10px;text-align:left;">オーナー</th><th style="padding:6px 10px;text-align:left;">宛先</th><th style="padding:6px 10px;text-align:left;">種別</th></tr></thead>`+
@@ -9002,7 +9051,11 @@ function renderPreview(){
     }
     shown++;
     const subj=buildSubject(d), body=buildBody(d);
-    const mailPill=d.email?`<span class="pill pill-ok">${esc(d.email)}</span>`:`<span class="pill pill-no">メール未登録</span>`;
+    const _bounced=loadBounced();
+    const _isB=d.email&&_bounced.has((d.email||"").toLowerCase());
+    const mailPill=d.email
+      ?(_isB?`<span class="pill" style="background:#fdecea;color:#c0392b;font-weight:800;">⚠ 不達 ${esc(d.email)}</span>`:`<span class="pill pill-ok">${esc(d.email)}</span>`)
+      :`<span class="pill pill-no">メール未登録</span>`;
     const cnt=d.props.length>1?`<span class="pill pill-cnt">${d.props.length}物件まとめ</span>`:"";
     let boshuN=0, yoteiN=0;
     d.props.forEach(p=>p.vac.forEach(v=>{ if(v.type==="募集中")boshuN++; else yoteiN++; }));
@@ -9034,6 +9087,7 @@ function renderPreview(){
           <button class="btn btn-sm" onclick="RENT.draftOne(${i})">📝 下書き作成</button>
           <button class="btn btn-sm" onclick="RENT.downloadOwnerPdf(${i})">📎 PDF書出し</button>
           <button class="btn btn-sm" onclick="RENT.copyBody(${i})">本文コピー</button>
+          ${sentSet.has(i)?`<button class="btn btn-sm btn-warn" onclick="RENT.unsendOne(${i})">↩ 未送信へ戻す</button>`:''}
         </div>
         <div class="pdf-preview" id="pdfprev-${i}"></div>
       </div>
@@ -9177,6 +9231,16 @@ async function sendMailsForChecked(){
   }catch(e){ setS("⚠ エラー: "+e.message); }
 }
 
+/* 個別: 送信済みを未送信に戻す(画面上の印を外すだけ。送ったメール自体は取り消せない) */
+function unsendOne(i){
+  if(!sentSet.has(i)) return;
+  if(!confirm(`${detail[i].owner} を「未送信」に戻します。\n（※すでに送信されたメールは取り消せません。画面の送信済み表示を外すだけです）`)) return;
+  sentSet.delete(i);
+  saveDetailState();
+  renderPreview();
+  toast("未送信に戻しました");
+}
+
 /* 個別: 1オーナーだけ送信 */
 async function sendOne(i){
   if(!(detail[i].email||"").trim()){ toast("メール未登録です"); return; }
@@ -9288,7 +9352,7 @@ function activate(){
 }
 
 
-window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, renderHistory, clearHistory };
+window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, renderHistory, clearHistory, checkBounces };
 })();
 </script>
 <script>
