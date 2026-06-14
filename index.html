@@ -1993,6 +1993,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
       <button class="btn btn-sm" id="rent-btn-send" onclick="RENT.sendMailsForChecked()" style="background:#2c4f38;color:#fff;border-color:#2c4f38;">📤 一斉送信</button>
       <span id="rent-action-status" style="font-size:.8rem;font-weight:700;color:var(--rt-accent-d);width:100%;"></span>
     </div>
+    <div id="rent-exclude-note" style="display:none;font-size:.8rem;color:var(--rt-muted);background:#f3f0ee;border-radius:8px;padding:8px 12px;margin-bottom:10px;"></div>
     <div class="preview" id="preview"><div class="empty">明細PDFを取り込むと、オーナーごとの送信内容がここに表示されます。</div></div>
   </div>
 
@@ -8725,18 +8726,19 @@ function norm(s){ return (s||"").replace(/[\s\u3000]/g,"").replace(/御中|様/g
 /* ===== オーナー一覧表 ===== */
 function renderOwners(){
   const t=document.getElementById("ownerTable");
-  let rows=owners.map((o,i)=>`<tr>
-    <td style="width:18%"><input value="${esc(o.name)}" oninput="RENT.editOwner(${i},'name',this.value)" placeholder="オーナー名"></td>
-    <td style="width:30%"><textarea rows="${Math.min(8,Math.max(1,(o.properties&&o.properties.length)||1))}" oninput="RENT.editProps(${i},this.value)" placeholder="物件名（複数は改行で）" style="font-family:inherit;font-size:.8rem;border:1px solid transparent;background:transparent;border-radius:5px;padding:5px 6px;width:100%;resize:vertical;line-height:1.5;">${esc((o.properties&&o.properties.length?o.properties:[o.property||'']).join('\n'))}</textarea>${(o.properties&&o.properties.length>1)?`<div style="font-size:.66rem;color:var(--gold);font-weight:800;margin-top:2px;">${o.properties.length}物件</div>`:''}</td>
-    <td style="width:22%"><input value="${esc(o.atena)}" oninput="RENT.editOwner(${i},'atena',this.value)" placeholder="宛名（〇〇 御中）"></td>
-    <td style="width:26%"><input value="${esc(o.email)}" oninput="RENT.editOwner(${i},'email',this.value)" placeholder="メールアドレス"></td>
+  let rows=owners.map((o,i)=>`<tr${o.exclude?' style="background:#f3f0ee;opacity:.7;"':''}>
+    <td style="width:16%"><input value="${esc(o.name)}" oninput="RENT.editOwner(${i},'name',this.value)" placeholder="オーナー名"></td>
+    <td style="width:28%"><textarea rows="${Math.min(8,Math.max(1,(o.properties&&o.properties.length)||1))}" oninput="RENT.editProps(${i},this.value)" placeholder="物件名（複数は改行で）" style="font-family:inherit;font-size:.8rem;border:1px solid transparent;background:transparent;border-radius:5px;padding:5px 6px;width:100%;resize:vertical;line-height:1.5;">${esc((o.properties&&o.properties.length?o.properties:[o.property||'']).join('\n'))}</textarea>${(o.properties&&o.properties.length>1)?`<div style="font-size:.66rem;color:var(--gold);font-weight:800;margin-top:2px;">${o.properties.length}物件</div>`:''}</td>
+    <td style="width:20%"><input value="${esc(o.atena)}" oninput="RENT.editOwner(${i},'atena',this.value)" placeholder="宛名（〇〇 御中）"></td>
+    <td style="width:24%"><input value="${esc(o.email)}" oninput="RENT.editOwner(${i},'email',this.value)" placeholder="メールアドレス"></td>
+    <td style="width:8%;text-align:center;"><label style="display:inline-flex;align-items:center;gap:3px;font-size:.7rem;cursor:pointer;color:${o.exclude?'#c0392b':'var(--muted)'};font-weight:${o.exclude?'800':'400'};"><input type="checkbox" ${o.exclude?'checked':''} onclick="RENT.editOwner(${i},'exclude',this.checked)" style="cursor:pointer;">送信しない</label></td>
     <td style="width:4%;text-align:center;"><button class="delrow" onclick="RENT.delOwner(${i})" title="削除">×</button></td>
   </tr>`).join("");
-  t.innerHTML=`<thead><tr><th>オーナー名</th><th>物件名</th><th>宛名</th><th>メールアドレス</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+  t.innerHTML=`<thead><tr><th>オーナー名</th><th>物件名</th><th>宛名</th><th>メールアドレス</th><th>除外</th><th></th></tr></thead><tbody>${rows}</tbody>`;
 }
 let _saveTimer=null;
 function flashSaved(){ const el=document.getElementById("ownerSaveStat"); if(!el)return; el.textContent="✅ 自動保存しました"; el.style.opacity="1"; clearTimeout(_saveTimer); _saveTimer=setTimeout(()=>{el.style.opacity="0";},1500); }
-function editOwner(i,f,v){ owners[i][f]=v; saveOwners(); flashSaved(); if(detail && detail.length){ const o=owners[i]; detail.forEach(d=>{ if(d.owner===o.name && f==="email") d.email=v; }); if(f==="email") renderPreview(); } }
+function editOwner(i,f,v){ owners[i][f]=v; saveOwners(); flashSaved(); if(f==="exclude"){ renderOwners(); renderPreview(); return; } if(detail && detail.length){ const o=owners[i]; detail.forEach(d=>{ if(d.owner===o.name && f==="email") d.email=v; }); if(f==="email") renderPreview(); } }
 function editProps(i,v){ const arr=v.split("\n").map(s=>s.trim()).filter(Boolean); owners[i].properties=arr; owners[i].property=arr.join("、"); saveOwners(); flashSaved(); }
 function addOwnerRow(){ owners.unshift({name:"",properties:[],property:"",atena:"",email:""}); saveOwners(); renderOwners(); flashSaved(); toast("新規オーナーを追加しました（自動保存）"); }
 function delOwner(i){ if(!confirm("この行を削除しますか?"))return; owners.splice(i,1); saveOwners(); renderOwners(); }
@@ -9043,8 +9045,12 @@ function renderPreview(){
   }
   const sb=(document.getElementById("searchBox")||{}).value||"";
   const q=sb.replace(/[\s\u3000]/g,"").toLowerCase();
-  let shown=0;
+  // 「送信しない」に指定されたオーナー名のセット(除外)
+  const excludeSet=new Set(owners.filter(o=>o.exclude).map(o=>norm(o.name)));
+  let shown=0, excludedCount=0;
   const cards=detail.map((d,i)=>{
+    // 除外オーナーはプレビューに出さない
+    if(excludeSet.has(norm(d.owner))){ excludedCount++; return ""; }
     if(q){
       const hay=(d.owner+" "+d.atena+" "+d.props.map(p=>p.property||p.bldNo).join(" ")).replace(/[\s\u3000]/g,"").toLowerCase();
       if(!hay.includes(q)) return "";
@@ -9093,7 +9099,13 @@ function renderPreview(){
       </div>
     </div>`;
   }).join("");
-  box.innerHTML = shown ? cards : '<div class="empty">「'+esc(sb)+'」に一致するオーナー・物件は見つかりませんでした。</div>';
+  box.innerHTML = shown ? cards : '<div class="empty">'+(q?('「'+esc(sb)+'」に一致するオーナー・物件は見つかりませんでした。'):'表示できるオーナーがありません。')+'</div>';
+  // 除外件数の案内
+  const exNote=document.getElementById("rent-exclude-note");
+  if(exNote){
+    if(excludedCount>0){ exNote.style.display="block"; exNote.textContent=`「送信しない」に指定したオーナー ${excludedCount} 件をプレビューから除外しています（オーナー一覧で変更できます）。`; }
+    else { exNote.style.display="none"; }
+  }
 }
 function setEmail(i,v){ if(detail&&detail[i]) detail[i].email=v; }
 function togglePv(i){ document.getElementById("pvb-"+i).classList.toggle("open"); }
