@@ -1675,9 +1675,9 @@ body.tab-kanban .kb-toolbar { display:flex; }
 <div class="app-tabs">
   <span class="app-pivot-logo" onclick="goToTop()" title="PIVOTトップへ">PIVOT</span>
   <span id="sync-status" style="display:none;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;background:#f0f0f3;color:#555;margin-left:6px;white-space:nowrap;" title="クラウド同期の状態"></span>
-  <button class="app-tab active" id="tab-pivot" onclick="switchApp('pivot')">Property Management</button>
-  <button class="app-tab" id="tab-kanban" onclick="switchApp('kanban')">Contract Management</button>
-  <button class="app-tab" id="tab-kintai" onclick="switchApp('kintai')">Attendance Management</button>
+  <button class="app-tab active" id="tab-pivot" onclick="switchApp('pivot')">Property</button>
+  <button class="app-tab" id="tab-kanban" onclick="switchApp('kanban')">Contract</button>
+  <button class="app-tab" id="tab-kintai" onclick="switchApp('kintai')">Attendance</button>
   <button class="app-tab" id="tab-rent" onclick="switchApp('rent')">Owner Mail</button>
   <!-- 契約管理のツールバー(タブバー内・契約管理タブ表示時のみ) -->
   <div class="kb-toolbar" id="kb-toolbar">
@@ -2057,8 +2057,8 @@ body.tab-kanban .kb-toolbar { display:flex; }
           style="width:46px;height:42px;border:1px solid #ddd;border-radius:9px;background:#fff;display:inline-flex;align-items:center;justify-content:center;padding:0;">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
         </button>
-        <button class="modal-tab-btn" onclick="closeModal();switchApp('pivot')">Property Management</button>
-        <button class="modal-tab-btn" onclick="closeModal();switchApp('kanban')">Contract Management</button>
+        <button class="modal-tab-btn" onclick="closeModal();switchApp('pivot')">Property</button>
+        <button class="modal-tab-btn" onclick="closeModal();switchApp('kanban')">Contract</button>
       </span>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
