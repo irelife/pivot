@@ -8859,24 +8859,9 @@ async function handleYearPdf(file){
     }
     const ownerCount=Object.keys(yearMap).length;
     stat.textContent=`📊 年間収支表 ${doc.numPages}ページ取込・${ownerCount}オーナーに仕分け（マッチ${matched}件）`;
-    // デバッグ: 年間と月額のオーナー名を比べて、照合できるか確認
-    try{
-      const yList=Object.values(yearMap).map(v=>v.owner);
-      const mList=(detail||[]).map(d=>d.owner);
-      let dbg="【年間収支表 照合デバッグ】\n\n";
-      dbg+="◆ 年間PDFから読み取ったオーナー名:\n";
-      yList.forEach(o=>{ dbg+="  ・["+o+"] → 照合キー[\""+norm(o)+"\"]\n"; });
-      dbg+="\n◆ 月額明細側のオーナー名:\n";
-      if(mList.length){ mList.forEach(o=>{ dbg+="  ・["+o+"] → 照合キー[\""+norm(o)+"\"]\n"; }); }
-      else { dbg+="  (月額明細がまだ取り込まれていません)\n"; }
-      dbg+="\n◆ 照合結果:\n";
-      Object.keys(yearMap).forEach(yk=>{
-        const hit=(detail||[]).some(d=>norm(d.owner)===yk);
-        dbg+="  年間["+yearMap[yk].owner+"] → 月額に"+(hit?"○一致あり":"×一致なし")+"\n";
-      });
-      alert(dbg);
-    }catch(e){}
-    if(detail && detail.length) renderPreview();   // 月次取込済みなら添付表示を更新
+    mergeYearIntoDetail();   // 年間だけのオーナーもカードとして追加(月額がなくても成立)
+    renderPreview();
+    showView("send");
   }catch(e){ console.error(e); stat.textContent="⚠ 年間収支表の読み込みに失敗しました: "+e.message; }
 }
 
@@ -9049,6 +9034,29 @@ function buildDetail(pages){
   if(newcTotal>0){ newcMsg=` <span style="color:#2c6e49;font-weight:800;">新規契約 ${newcTotal}件を検出。</span>`; }
   note.innerHTML=`取込 <b>${groups.length}</b> 物件 → <b>${detail.length}</b> オーナーに仕分け。`+
     (noMail?` <span style="color:var(--warn)">メール未登録 ${noMail} 件</span>（オーナー一覧で登録してください）`:` 全オーナーにメール登録あり。`)+newcMsg;
+  mergeYearIntoDetail();   // 年間収支表が既に取り込まれていれば、年間だけのオーナーも統合
+}
+
+/* 年間収支表のオーナーを detail に統合する。
+   - detail に既にいるオーナー → そのまま(添付は照合で付く)
+   - detail にいないオーナー → 「年間のみ」のカードを追加 */
+function mergeYearIntoDetail(){
+  if(!yearMap || !Object.keys(yearMap).length) return;
+  const have=new Set((detail||[]).map(d=>norm(d.owner)));
+  Object.keys(yearMap).forEach(key=>{
+    if(have.has(key)) return;   // 月額側に既にいる → 追加不要
+    const yo=yearMap[key];
+    // オーナー一覧から宛名・メールを補完
+    const o=owners.find(ow=>norm(ow.name)===key || norm(ow.atena)===key);
+    detail.push({
+      owner: o?o.name:yo.owner,
+      atena: (o&&o.atena)?o.atena:(yo.owner+" 御中"),
+      email: o?o.email:"",
+      props: [],          // 月額明細なし
+      yearOnly: true       // 年間のみのカード(月額PDFなし)
+    });
+  });
+  saveDetailState();
 }
 
 /* ===== 仕分け結果の保存・復元(PDF本体は保存しない=軽量) ===== */
@@ -9264,10 +9272,14 @@ function renderPreview(){
     d.props.forEach(p=>p.vac.forEach(v=>{ if(v.type==="募集中")boshuN++; else yoteiN++; }));
     d.props.forEach(p=>{ newN+=((p.newc||[]).length); });
     let vacPill="";
-    if(boshuN) vacPill+=`<span class="vac">募集中 ${boshuN}</span>`;
-    if(yoteiN) vacPill+=`<span class="vac" style="margin-left:6px;color:#a14a3a;">解約予定 ${yoteiN}</span>`;
-    if(newN) vacPill+=`<span class="vac" style="margin-left:6px;color:#2c6e49;font-weight:800;">新規契約 ${newN}</span>`;
-    if(!boshuN && !yoteiN && !newN) vacPill=`<span class="vac none">満室</span>`;
+    if(d.yearOnly){
+      vacPill=`<span class="vac" style="color:#8a6d2f;font-weight:800;">📊 年間収支表のみ</span>`;
+    }else{
+      if(boshuN) vacPill+=`<span class="vac">募集中 ${boshuN}</span>`;
+      if(yoteiN) vacPill+=`<span class="vac" style="margin-left:6px;color:#a14a3a;">解約予定 ${yoteiN}</span>`;
+      if(newN) vacPill+=`<span class="vac" style="margin-left:6px;color:#2c6e49;font-weight:800;">新規契約 ${newN}</span>`;
+      if(!boshuN && !yoteiN && !newN) vacPill=`<span class="vac none">満室</span>`;
+    }
     const pageList=d.props.flatMap(p=>p.pages).sort((a,b)=>a-b);
     const _sent=sentSet.has(i);
     const _itemClass=_isB?' sent-fail':(_sent?' sent':'');
@@ -9285,7 +9297,9 @@ function renderPreview(){
         ${mailPill}
       </div>
       <div class="pv-body" id="pvb-${i}">
-        <div class="pv-meta">対象物件: <b>${d.props.map(p=>esc(p.property||p.bldNo)).join(" / ")}</b>　|　PDF ${pageList.length}ページ分 <span class="attach">📎 ${esc(d.owner)}_明細.pdf を添付予定</span>${yearKeys.has(norm(d.owner))?` <span class="attach" style="background:#f7efdc;color:#8a6d2f;">📊 年間収支表.pdf も添付</span>`:""} <span class="attach" style="background:#eef;color:#446;">送信元 infoirelife@gmail.com</span></div>
+        <div class="pv-meta">${d.yearOnly
+          ? `年間収支表のみ送付 <span class="attach" style="background:#f7efdc;color:#8a6d2f;">📊 ${esc(d.owner)}_年間収支表.pdf を添付予定</span>`
+          : `対象物件: <b>${d.props.map(p=>esc(p.property||p.bldNo)).join(" / ")}</b>　|　PDF ${pageList.length}ページ分 <span class="attach">📎 ${esc(d.owner)}_明細.pdf を添付予定</span>${yearKeys.has(norm(d.owner))?` <span class="attach" style="background:#f7efdc;color:#8a6d2f;">📊 年間収支表.pdf も添付</span>`:""}`} <span class="attach" style="background:#eef;color:#446;">送信元 infoirelife@gmail.com</span></div>
         <div class="pv-grid">
           <div class="field"><label>宛先メール</label><input value="${esc(d.email)}" oninput="RENT.setEmail(${i},this.value)" placeholder="未登録 — 入力するとここだけ反映"></div>
           <div class="field"><label>件名</label><input id="subj-${i}" value="${esc(subj)}"></div>
