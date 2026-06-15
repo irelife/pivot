@@ -8820,15 +8820,17 @@ function parsePage(t,page){
   const idx=t.indexOf("収入明細"); const body=(idx>=0?t.slice(idx):t).replace(/\n/g,"");
   d.vac=extractVac(body);
   d.newc=extractNew(body);
-  // デバッグ: 「新規契約」周辺のテキストを保持(抽出が0件のとき原因を確認するため)
-  if(body.indexOf("新規契約")>=0){
-    const idx=body.indexOf("新規契約");
-    d._newcDebug=body.slice(Math.max(0,idx-40), idx+40);
-  } else if(body.indexOf("新規")>=0){
-    const idx=body.indexOf("新規");
-    d._newcDebug="[新規のみ] "+body.slice(Math.max(0,idx-40), idx+40);
+  // デバッグ: テキスト全体(t)から関連文字を探す
+  const tFlat=t.replace(/\n/g,"");
+  const frags=["新規契約","新規","契約開始","開始日","2026年06月10日","6月10日","06月10日","契約"];
+  const found=frags.filter(f=>tFlat.indexOf(f)>=0);
+  if(tFlat.indexOf("新規")>=0){
+    const ix=tFlat.indexOf("新規");
+    d._newcDebug="周辺:"+tFlat.slice(Math.max(0,ix-30), ix+50);
+  } else if(found.length){
+    d._newcDebug="含む語:"+found.join(",");
   } else {
-    d._newcDebug="";
+    d._newcDebug="該当語なし(備考欄が抽出されていない)";
   }
   return d;
 }
@@ -8907,10 +8909,10 @@ function buildDetail(pages){
   note.style.display="block";
   // 新規契約の検出状況
   let newcTotal=0; detail.forEach(d=>d.props.forEach(p=>{ newcTotal+=((p.newc||[]).length); }));
-  const dbg=detail.filter(d=>d._newcDebug).map(d=>`【${d.owner}】…${esc(d._newcDebug)}`);
+  const dbg=detail.filter(d=>d._newcDebug).slice(0,5).map(d=>`【${d.owner}】${esc(d._newcDebug)}`);
   let newcMsg="";
   if(newcTotal>0){ newcMsg=` <span style="color:#2c6e49;font-weight:800;">新規契約 ${newcTotal}件を検出。</span>`; }
-  else if(dbg.length){ newcMsg=`<br><span style="color:var(--warn);font-size:.8rem;">「新規契約」の文字は見つかりましたが部屋番号と紐付けできませんでした。読み取り内容: ${dbg.join(" / ")}</span>`; }
+  if(dbg.length){ newcMsg+=`<br><span style="color:var(--warn);font-size:.78rem;">[新規契約デバッグ] ${dbg.join(" ／ ")}</span>`; }
   note.innerHTML=`取込 <b>${groups.length}</b> 物件 → <b>${detail.length}</b> オーナーに仕分け。`+
     (noMail?` <span style="color:var(--warn)">メール未登録 ${noMail} 件</span>（オーナー一覧で登録してください）`:` 全オーナーにメール登録あり。`)+newcMsg;
 }
