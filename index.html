@@ -9223,6 +9223,12 @@ function fill(s,d){
     nb.push("");
     vacBlock = vacBlock + nb.join("\n");
   }
+  // 年間収支表が添付されるオーナーには、その案内を本文に自動追記
+  let hasYear = false;
+  try{ hasYear = d.yearOnly || (yearMap && yearMap[norm(d.owner)]); }catch(e){}
+  if(hasYear){
+    vacBlock = vacBlock + "\nなお、本年分の年間収支表もあわせて添付しておりますので、ご確認のほどよろしくお願い申し上げます。\n";
+  }
   return s
     .replace(/\{\{宛名\}\}/g, d.atena||d.owner)
     .replace(/\{\{オーナー名\}\}/g, d.owner)
@@ -9542,14 +9548,33 @@ async function draftOne(i){
 async function previewOwnerPdf(i){
   const box=document.getElementById("pdfprev-"+i);
   if(box.dataset.open==="1"){ box.innerHTML=""; box.dataset.open="0"; return; }
-  box.innerHTML='<div class="pdf-loading">明細PDFを生成中…</div>';
-  const blob=await makeOwnerPdfBlob(i);
-  if(!blob){ box.innerHTML=""; return; }
-  const url=URL.createObjectURL(blob);
+  box.innerHTML='<div class="pdf-loading">添付PDFを生成中…</div>';
   const d=detail[i];
-  const pages=[...new Set(d.props.flatMap(p=>p.pages))].length;
-  box.innerHTML=`<div class="pdf-cap">📎 ${esc(d.owner)}_明細.pdf（${pages}ページ）— このPDFが添付されます</div>
-    <iframe src="${url}#toolbar=1" title="明細プレビュー"></iframe>`;
+  let html="";
+  // 月額明細(月額が取り込まれていれば)
+  if(pdfDoc && !d.yearOnly){
+    const blob=await makeOwnerPdfBlob(i);
+    if(blob){
+      const url=URL.createObjectURL(blob);
+      const pages=[...new Set(d.props.flatMap(p=>p.pages))].length;
+      html+=`<div class="pdf-cap">📎 ${esc(d.owner)}_明細.pdf（${pages}ページ）— このPDFが添付されます</div>
+        <iframe src="${url}#toolbar=1" title="明細プレビュー"></iframe>`;
+    }
+  }
+  // 年間収支表(あれば)
+  const yb64=await makeYearPdfBase64(d.owner);
+  if(yb64){
+    try{
+      const bin=atob(yb64); const arr=new Uint8Array(bin.length);
+      for(let k=0;k<bin.length;k++) arr[k]=bin.charCodeAt(k);
+      const yblob=new Blob([arr],{type:"application/pdf"});
+      const yurl=URL.createObjectURL(yblob);
+      html+=`<div class="pdf-cap" style="background:#f7efdc;color:#8a6d2f;margin-top:10px;">📊 ${esc(d.owner)}_年間収支表.pdf — このPDFも添付されます</div>
+        <iframe src="${yurl}#toolbar=1" title="年間収支表プレビュー"></iframe>`;
+    }catch(e){}
+  }
+  if(!html){ box.innerHTML='<div class="pdf-loading">表示できるPDFがありません（PDFを取り込んでください）</div>'; box.dataset.open="1"; return; }
+  box.innerHTML=html;
   box.dataset.open="1";
 }
 
