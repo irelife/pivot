@@ -8859,6 +8859,23 @@ async function handleYearPdf(file){
     }
     const ownerCount=Object.keys(yearMap).length;
     stat.textContent=`📊 年間収支表 ${doc.numPages}ページ取込・${ownerCount}オーナーに仕分け（マッチ${matched}件）`;
+    // デバッグ: 年間と月額のオーナー名を比べて、照合できるか確認
+    try{
+      const yList=Object.values(yearMap).map(v=>v.owner);
+      const mList=(detail||[]).map(d=>d.owner);
+      let dbg="【年間収支表 照合デバッグ】\n\n";
+      dbg+="◆ 年間PDFから読み取ったオーナー名:\n";
+      yList.forEach(o=>{ dbg+="  ・["+o+"] → 照合キー[\""+norm(o)+"\"]\n"; });
+      dbg+="\n◆ 月額明細側のオーナー名:\n";
+      if(mList.length){ mList.forEach(o=>{ dbg+="  ・["+o+"] → 照合キー[\""+norm(o)+"\"]\n"; }); }
+      else { dbg+="  (月額明細がまだ取り込まれていません)\n"; }
+      dbg+="\n◆ 照合結果:\n";
+      Object.keys(yearMap).forEach(yk=>{
+        const hit=(detail||[]).some(d=>norm(d.owner)===yk);
+        dbg+="  年間["+yearMap[yk].owner+"] → 月額に"+(hit?"○一致あり":"×一致なし")+"\n";
+      });
+      alert(dbg);
+    }catch(e){}
     if(detail && detail.length) renderPreview();   // 月次取込済みなら添付表示を更新
   }catch(e){ console.error(e); stat.textContent="⚠ 年間収支表の読み込みに失敗しました: "+e.message; }
 }
@@ -9353,21 +9370,23 @@ function toggleCheckAll(on){
 
 /* 選択オーナーの下書き or 送信データを組み立てる */
 async function buildMailPayload(indexes, statusFn){
-  if(!pdfDoc){
-    alert("明細PDFが読み込まれていません。\n\n前回の仕分け内容は復元されていますが、PDFの中身は保存されないため、送信・下書きには明細PDFをもう一度ドロップして取り込んでください。");
+  // 月額PDFも年間PDFも両方ない場合だけ止める(どちらかあれば進める)
+  if(!pdfDoc && !yearPdfDoc){
+    alert("明細PDFが読み込まれていません。\n\n送信・下書きには、月額明細または年間収支表のPDFをドロップして取り込んでください。");
     return null;
   }
   const arr=[];
   for(let k=0;k<indexes.length;k++){
     const i=indexes[k];
     const d=detail[i];
-    if(statusFn) statusFn(`明細PDF生成中… ${k+1}/${indexes.length}（${d.owner}）`);
+    if(statusFn) statusFn(`PDF生成中… ${k+1}/${indexes.length}（${d.owner}）`);
     const to=(d.email||"").trim();
     const subject=buildSubject(d);
     const body=buildBody(d);
-    const pdfBase64=await makeOwnerPdfBase64(i);
+    // 月額明細PDF(月額が取り込まれていれば)
+    const pdfBase64= pdfDoc ? await makeOwnerPdfBase64(i) : null;
     const month=(d.props[0]&&d.props[0].month||"").replace(/[年月]/g,"");
-    const pdfName=`${d.owner}_明細_${month}.pdf`.replace(/\s/g,"");
+    const pdfName= pdfBase64 ? `${d.owner}_明細_${month}.pdf`.replace(/\s/g,"") : "";
     // 年間収支表があれば2つ目の添付として追加
     const pdfBase64_2=await makeYearPdfBase64(d.owner);
     const pdfName_2=pdfBase64_2 ? `${d.owner}_年間収支表.pdf`.replace(/\s/g,"") : "";
