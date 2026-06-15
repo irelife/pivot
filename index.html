@@ -8767,13 +8767,16 @@ async function handlePdf(file){
       useSystemFonts:true
     }).promise;
     const pages=[];
+    let _allRaw="";
     for(let i=1;i<=doc.numPages;i++){
       const pg=await doc.getPage(i);
       const tc=await pg.getTextContent();
       const text=itemsToText(tc.items);
+      _allRaw += "\n===P"+i+"===\n"+text;
       pages.push(parsePage(text,i));
       stat.textContent=`解析中… ${i}/${doc.numPages}ページ`;
     }
+    window._PDF_RAW=_allRaw;
     buildDetail(pages);
     stat.textContent=`✅ ${doc.numPages}ページを取込・${detail.length}オーナーに仕分けしました`;
     renderPreview();
@@ -8818,8 +8821,9 @@ function parsePage(t,page){
   m=t.match(/送金日：(\d{4}年\d{2}月\d{2}日)/); d.sokin=m?m[1]:"";
   m=t.match(/【\s*(\d{4}年\d{2}月)\s*】/); d.month=m?m[1]:"";
   const idx=t.indexOf("収入明細"); const body=(idx>=0?t.slice(idx):t).replace(/\n/g,"");
+  const bodyLines=(idx>=0?t.slice(idx):t);
   d.vac=extractVac(body);
-  d.newc=extractNew(body);
+  d.newc=extractNew(bodyLines);
   d._rawText=t;
   return d;
 }
@@ -8838,19 +8842,20 @@ function extractVac(body){
 /* 新規契約を抽出: 備考欄「新規契約 契約開始日:YYYY年MM月DD日」+ その前の部屋番号 */
 function extractNew(body){
   const out=[], seen=new Set();
-  function roomBefore(pre){
-    let ms=[...pre.matchAll(/(\d{3})\s*[^\d\n][^0-9\n]*?\s*26\/\d{2}/g)];
-    if(ms.length) return ms[ms.length-1][1];
-    ms=[...pre.matchAll(/(\d{3})/g)];
-    return ms.length?ms[ms.length-1][1]:"";
-  }
-  let m, re=/新規契約/g;
-  while((m=re.exec(body))){
-    const after=body.slice(m.index, m.index+60);
+  const lines=body.split("\n");
+  for(let i=0;i<lines.length;i++){
+    const ln=lines[i];
+    if(ln.indexOf("新規契約")<0) continue;
+    // 行頭付近の部屋番号(3桁)を取る
+    let room="";
+    let rm=ln.match(/^\s*(\d{2,4})\s/);            // 行の先頭が部屋番号
+    if(rm) room=rm[1];
+    if(!room){ const all=[...ln.matchAll(/(\d{2,4})/g)]; if(all.length) room=all[0][1]; }
+    // 日付(全角:／半角:両対応)。同じ行になければ次の行も見る
     let date="";
-    const dm=after.match(/契約開始日[：:]?\s*(\d{4}年\d{1,2}月\d{1,2}日)/);
+    let dm=ln.match(/契約開始日[：:]?\s*(\d{4}年\d{1,2}月\d{1,2}日)/);
+    if(!dm && i+1<lines.length){ dm=(ln+lines[i+1]).match(/契約開始日[：:]?\s*(\d{4}年\d{1,2}月\d{1,2}日)/); }
     if(dm) date=dm[1];
-    const room=roomBefore(body.slice(0,m.index));
     const k=room+"|"+date;
     if(!seen.has(k)){ seen.add(k); out.push({room,date}); }
   }
@@ -8898,19 +8903,8 @@ function buildDetail(pages){
   note.style.display="block";
   // 新規契約の検出状況
   let newcTotal=0; detail.forEach(d=>d.props.forEach(p=>{ newcTotal+=((p.newc||[]).length); }));
-  // デバッグ: 生テキストに「新規」があるオーナーの周辺を表示
-  const dbg=[];
-  detail.forEach(d=>{
-    const raw=(d._rawText||"").replace(/\n/g," ");
-    if(raw.indexOf("新規")>=0){
-      const ix=raw.indexOf("新規");
-      dbg.push(`【${d.owner}】「新規」発見→ ${esc(raw.slice(Math.max(0,ix-25), ix+45))}`);
-    }
-  });
   let newcMsg="";
   if(newcTotal>0){ newcMsg=` <span style="color:#2c6e49;font-weight:800;">新規契約 ${newcTotal}件を検出。</span>`; }
-  if(dbg.length){ newcMsg+=`<br><span style="color:var(--warn);font-size:.75rem;">[デバッグ] ${dbg.slice(0,5).join("<br>")}</span>`; }
-  else { newcMsg+=`<br><span style="color:var(--warn);font-size:.75rem;">[デバッグ] どのオーナーのテキストにも「新規」の文字が見つかりませんでした（PDFから備考欄が読み取れていない可能性）。</span>`; }
   note.innerHTML=`取込 <b>${groups.length}</b> 物件 → <b>${detail.length}</b> オーナーに仕分け。`+
     (noMail?` <span style="color:var(--warn)">メール未登録 ${noMail} 件</span>（オーナー一覧で登録してください）`:` 全オーナーにメール登録あり。`)+newcMsg;
 }
