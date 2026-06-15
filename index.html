@@ -1967,13 +1967,22 @@ body.tab-kanban .kb-toolbar { display:flex; }
 
   <!-- ===== 送信ビュー ===== -->
   <div class="view active" id="view-send">
-    <label class="drop" id="drop">
-      <div class="ico">📄</div>
-      <div class="big">明細PDFをここにドロップ / クリックで選択</div>
-      <div class="sub">一枚つづりの収支報告書PDF（複数ページ可）</div>
-      <input type="file" id="pdfInput" accept="application/pdf">
-    </label>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <label class="drop" id="drop" style="flex:1;min-width:280px;">
+        <div class="ico">📄</div>
+        <div class="big">① 月額明細をドロップ / クリック</div>
+        <div class="sub">毎月の収支報告書PDF（複数ページ可）</div>
+        <input type="file" id="pdfInput" accept="application/pdf">
+      </label>
+      <label class="drop" id="dropYear" style="flex:1;min-width:280px;border-color:#c9a86a;">
+        <div class="ico">📊</div>
+        <div class="big">② 年間収支表をドロップ / クリック（年1回・任意）</div>
+        <div class="sub">年間収支一覧表PDF（複数ページ可）</div>
+        <input type="file" id="pdfInputYear" accept="application/pdf">
+      </label>
+    </div>
     <div class="pdfstat" id="pdfStat"></div>
+    <div class="pdfstat" id="pdfStatYear" style="color:#9a7b3a;"></div>
 
     <div class="bar">
       <h2>送信プレビュー</h2>
@@ -2723,7 +2732,7 @@ try {
     // ログイン維持: ブラウザを閉じても保持(次回から自動ログイン)。ログアウトで解除。
     try{
       if(firebase.auth && firebase.auth.Auth && firebase.auth.Auth.Persistence){
-        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION);
       }
     }catch(e){ console.warn('persistence設定に失敗:', e); }
   }
@@ -3130,12 +3139,20 @@ window.addEventListener('DOMContentLoaded', () => {
         firebase.auth().onAuthStateChanged(async function(user){
           if(_booted) return;
           if(user && user.email){
+            // 自動入室の前に「1時間経過/日付変更」をチェック。期限切れなら再ログイン。
+            if(isSessionExpired()){
+              _booted = true;
+              try{ firebase.auth().signOut(); }catch(e){}
+              try{ localStorage.removeItem(LS_LASTSEEN); }catch(e){}
+              showLoginScreen();
+              return;
+            }
             // ログイン記憶あり: 入力画面を出さずに自動入室
             _booted = true;
             try{ var ex = document.getElementById('pivot-login'); if(ex) ex.remove(); }catch(e){}
             try{ recordLoginHistory(user.email); }catch(e){}
             try{ await loginPull(); }catch(e){}
-            try{ _pivotCurrentUser = user.email; updateLoginUserLabel(); }catch(e){}
+            try{ _pivotCurrentUser = user.email; updateLoginUserLabel(); markActivity(); }catch(e){}
           } else {
             // 未ログイン: 通常どおりログイン画面を表示
             _booted = true;
@@ -3196,6 +3213,49 @@ function pivotLogout(){
   if(typeof showLoginScreen === 'function'){ showLoginScreen(); }
 }
 try{ window.pivotLogout = pivotLogout; }catch(e){}
+
+// ===== 自動ログアウト(1時間操作なし / 日付が変わったら 再ログイン) =====
+const LS_LASTSEEN = 'pivot_lastseen_v1';
+const IDLE_LIMIT_MS = 60 * 60 * 1000;  // 1時間
+
+// 最終操作時刻と日付を記録
+function markActivity(){
+  try{
+    localStorage.setItem(LS_LASTSEEN, JSON.stringify({ t: Date.now(), d: new Date().toDateString() }));
+  }catch(e){}
+}
+
+// 「1時間経過」または「日付が変わった」を判定
+function isSessionExpired(){
+  try{
+    const s = JSON.parse(localStorage.getItem(LS_LASTSEEN) || 'null');
+    if(!s) return false;
+    const now = Date.now(), today = new Date().toDateString();
+    if(now - s.t > IDLE_LIMIT_MS) return true;
+    if(s.d && s.d !== today) return true;
+  }catch(e){}
+  return false;
+}
+
+// 期限切れならログアウトしてログイン画面へ
+function checkAutoLogout(){
+  if(!_pivotCurrentUser) return;          // 未ログインなら何もしない
+  if(isSessionExpired()){
+    _pivotCurrentUser = '';
+    try{ updateLoginUserLabel(); }catch(e){}
+    try{ if(_firebaseReady && firebase.auth){ firebase.auth().signOut(); } }catch(e){}
+    try{ localStorage.removeItem(LS_LASTSEEN); }catch(e){}
+    if(typeof showLoginScreen === 'function'){ showLoginScreen(); }
+  }
+}
+
+// 操作のたびに最終操作時刻を更新(ログイン中のみ)
+['click','keydown','scroll','touchstart','mousemove'].forEach(function(ev){
+  try{ document.addEventListener(ev, function(){ if(_pivotCurrentUser) markActivity(); }, { passive:true }); }catch(e){}
+});
+// 1分ごと、およびタブに戻ったときに期限をチェック
+try{ setInterval(checkAutoLogout, 60 * 1000); }catch(e){}
+try{ document.addEventListener('visibilitychange', function(){ if(!document.hidden) checkAutoLogout(); }); }catch(e){}
 
 // ===== ログイン履歴(GASスプレッドシートに記録) =====
 // ログイン成功時に「誰が・いつ」をクラウドに1行追記する。
@@ -3334,7 +3394,7 @@ function showLoginScreen(){
     msg.textContent = 'ログインを確認しています…';
     try{
       // ログイン記憶: 一度ログインすれば次回以降は入力不要(この端末・このブラウザで保持)
-      try{ await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL); }catch(e){}
+      try{ await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION); }catch(e){}
       // Firebaseでメール+パスワード認証
       const cred = await firebase.auth().signInWithEmailAndPassword(email, pass);
       const loggedInEmail = (cred && cred.user && cred.user.email) ? cred.user.email : email;
@@ -3344,7 +3404,7 @@ function showLoginScreen(){
       msg.textContent = 'クラウドから最新データを取得しています…';
       await loginPull();
       msg.textContent = '完了しました';
-      try{ _pivotCurrentUser = loggedInEmail; updateLoginUserLabel(); }catch(e){}
+      try{ _pivotCurrentUser = loggedInEmail; updateLoginUserLabel(); markActivity(); }catch(e){}
       ov.remove();
     }catch(e){
       const code = (e && e.code) ? e.code : '';
@@ -8684,6 +8744,8 @@ let owners = loadOwners();
 let tmpl = loadTmpl();
 let detail = [];      // オーナー別にまとめた明細(取込結果)
 let pdfDoc = null;    // pdf-lib document(分割用)
+let yearPdfDoc = null;   // 年間収支表の pdf-lib document
+let yearMap = {};        // オーナー名(norm) -> { pages:[ページ番号配列] }  年間収支表の仕分け結果
 let sentSet = new Set();   // 送信済みオーナーのindex(帯を青く表示)
 
 function loadOwners(){
@@ -8751,6 +8813,73 @@ const drop=document.getElementById("drop"), pdfInput=document.getElementById("pd
 ["dragleave","drop"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove("over");}));
 drop.addEventListener("drop",ev=>{ const f=ev.dataTransfer.files[0]; if(f) handlePdf(f); });
 pdfInput.addEventListener("change",ev=>{ const f=ev.target.files[0]; if(f) handlePdf(f); });
+
+// 年間収支表のドロップ処理
+const dropYear=document.getElementById("dropYear"), pdfInputYear=document.getElementById("pdfInputYear");
+if(dropYear){
+  ["dragover","dragenter"].forEach(e=>dropYear.addEventListener(e,ev=>{ev.preventDefault();dropYear.classList.add("over");}));
+  ["dragleave","drop"].forEach(e=>dropYear.addEventListener(e,ev=>{ev.preventDefault();dropYear.classList.remove("over");}));
+  dropYear.addEventListener("drop",ev=>{ const f=ev.dataTransfer.files[0]; if(f) handleYearPdf(f); });
+  pdfInputYear.addEventListener("change",ev=>{ const f=ev.target.files[0]; if(f) handleYearPdf(f); });
+}
+
+// 年間収支表PDFを取り込み、「オーナー名 ： ◯◯」で各オーナーに仕分け
+async function handleYearPdf(file){
+  if(file.type!=="application/pdf"){ toast("PDFファイルを選んでください"); return; }
+  const stat=document.getElementById("pdfStatYear");
+  stat.textContent="年間収支表 読み込み中…";
+  const buf=await file.arrayBuffer();
+  try{
+    yearPdfDoc = await PDFLib.PDFDocument.load(buf);
+    pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    const doc=await pdfjsLib.getDocument({
+      data:buf.slice(0),
+      cMapUrl:"https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/",
+      cMapPacked:true,
+      useSystemFonts:true
+    }).promise;
+    yearMap={};
+    let matched=0;
+    for(let i=1;i<=doc.numPages;i++){
+      const pg=await doc.getPage(i);
+      const tc=await pg.getTextContent();
+      const text=itemsToText(tc.items);
+      // 「オーナー名 ： ◯◯　御中」を優先、なければ通常の宛名抽出
+      let owner="";
+      let m=text.match(/オーナー名[\s\u3000]*[：:][\s\u3000]*(.+?)[\s\u3000]*(?:御中|様)/);
+      if(m){ owner=m[1].trim(); }
+      else { owner=(atenaOf(text)||"").replace(/[\s\u3000]*(御中|様)$/,"").trim(); }
+      if(owner){
+        const key=norm(owner);
+        if(!yearMap[key]) yearMap[key]={ owner:owner, pages:[] };
+        yearMap[key].pages.push(i);   // pdf-libは0始まりなので後で-1する
+        matched++;
+      }
+      stat.textContent=`年間収支表 解析中… ${i}/${doc.numPages}ページ`;
+    }
+    const ownerCount=Object.keys(yearMap).length;
+    stat.textContent=`📊 年間収支表 ${doc.numPages}ページ取込・${ownerCount}オーナーに仕分け（マッチ${matched}件）`;
+    if(detail && detail.length) renderPreview();   // 月次取込済みなら添付表示を更新
+  }catch(e){ console.error(e); stat.textContent="⚠ 年間収支表の読み込みに失敗しました: "+e.message; }
+}
+
+// あるオーナーに対応する年間収支表PDFを切り出して Base64 で返す(なければ null)
+async function makeYearPdfBase64(ownerName){
+  if(!yearPdfDoc) return null;
+  const key=norm(ownerName);
+  const ent=yearMap[key];
+  if(!ent || !ent.pages.length) return null;
+  try{
+    const out=await PDFLib.PDFDocument.create();
+    const idxs=ent.pages.map(p=>p-1);   // 0始まりに変換
+    const copied=await out.copyPages(yearPdfDoc, idxs);
+    copied.forEach(p=>out.addPage(p));
+    const bytes=await out.save();
+    let bin=""; const arr=new Uint8Array(bytes);
+    for(let i=0;i<arr.length;i++) bin+=String.fromCharCode(arr[i]);
+    return btoa(bin);
+  }catch(e){ console.error("年間PDF切出し失敗:",e); return null; }
+}
 
 async function handlePdf(file){
   if(file.type!=="application/pdf"){ toast("PDFファイルを選んでください"); return; }
@@ -9094,6 +9223,8 @@ function renderPreview(){
   }
   const sb=(document.getElementById("searchBox")||{}).value||"";
   const q=sb.replace(/[\s\u3000]/g,"").toLowerCase();
+  // 年間収支表が紐づくオーナー(norm)のセット
+  const yearKeys=new Set(Object.keys(yearMap||{}));
   // 「送信しない」に指定されたオーナー名のセット(除外)
   const excludeSet=new Set(owners.filter(o=>o.exclude).map(o=>norm(o.name)));
   let shown=0, excludedCount=0;
@@ -9137,7 +9268,7 @@ function renderPreview(){
         ${mailPill}
       </div>
       <div class="pv-body" id="pvb-${i}">
-        <div class="pv-meta">対象物件: <b>${d.props.map(p=>esc(p.property||p.bldNo)).join(" / ")}</b>　|　PDF ${pageList.length}ページ分 <span class="attach">📎 ${esc(d.owner)}_明細.pdf を添付予定</span> <span class="attach" style="background:#eef;color:#446;">送信元 infoirelife@gmail.com</span></div>
+        <div class="pv-meta">対象物件: <b>${d.props.map(p=>esc(p.property||p.bldNo)).join(" / ")}</b>　|　PDF ${pageList.length}ページ分 <span class="attach">📎 ${esc(d.owner)}_明細.pdf を添付予定</span>${yearKeys.has(norm(d.owner))?` <span class="attach" style="background:#f7efdc;color:#8a6d2f;">📊 年間収支表.pdf も添付</span>`:""} <span class="attach" style="background:#eef;color:#446;">送信元 infoirelife@gmail.com</span></div>
         <div class="pv-grid">
           <div class="field"><label>宛先メール</label><input value="${esc(d.email)}" oninput="RENT.setEmail(${i},this.value)" placeholder="未登録 — 入力するとここだけ反映"></div>
           <div class="field"><label>件名</label><input id="subj-${i}" value="${esc(subj)}"></div>
@@ -9237,7 +9368,10 @@ async function buildMailPayload(indexes, statusFn){
     const pdfBase64=await makeOwnerPdfBase64(i);
     const month=(d.props[0]&&d.props[0].month||"").replace(/[年月]/g,"");
     const pdfName=`${d.owner}_明細_${month}.pdf`.replace(/\s/g,"");
-    arr.push({ to, subject, body, pdfBase64, pdfName, owner:d.owner });
+    // 年間収支表があれば2つ目の添付として追加
+    const pdfBase64_2=await makeYearPdfBase64(d.owner);
+    const pdfName_2=pdfBase64_2 ? `${d.owner}_年間収支表.pdf`.replace(/\s/g,"") : "";
+    arr.push({ to, subject, body, pdfBase64, pdfName, pdfBase64_2, pdfName_2, owner:d.owner });
   }
   return arr;
 }
