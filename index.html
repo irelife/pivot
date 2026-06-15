@@ -1631,6 +1631,8 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #rent-view .preview{background:#fff;border:1px solid var(--rt-line);border-radius:12px;padding:0;overflow:hidden;}
   #rent-view .pv-item{border-bottom:1px solid var(--rt-line);}
   #rent-view .pv-item.sent{background:#eaf3fb;}
+  #rent-view .pv-item.sent-fail{background:#fdecea;}
+  #rent-view .pv-item.sent-fail .pv-head:hover{background:#f9ddd9;}
   #rent-view .pv-item.sent .pv-head:hover{background:#deecf8;}
   #rent-view .pv-head{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;}
   #rent-view .pv-head:hover{background:#faf8f2;}
@@ -2023,7 +2025,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
       <textarea id="tmplSubject" style="min-height:48px;" oninput="RENT.saveTmpl();RENT.renderPreview()"></textarea>
       <label style="margin-top:14px;">本文テンプレート</label>
       <textarea id="tmplBody" oninput="RENT.saveTmpl();RENT.renderPreview()"></textarea>
-      <div class="hint">差し込みタグ： {{宛名}} / {{オーナー名}} / {{対象月}} / {{物件一覧}} / {{送金合計}} / {{空き予定}} / {{送金日}}</div>
+      <div class="hint">差し込みタグ： {{宛名}} / {{オーナー名}} / {{対象月}} / {{物件一覧}} / {{送金合計}} / {{空き予定}} / {{送金日}}　※新規契約は{{空き予定}}内に自動で追記されます</div>
     </div>
   </div>
   <div class="view" id="view-history">
@@ -8731,7 +8733,7 @@ function renderOwners(){
     <td style="width:28%"><textarea rows="${Math.min(8,Math.max(1,(o.properties&&o.properties.length)||1))}" oninput="RENT.editProps(${i},this.value)" placeholder="物件名（複数は改行で）" style="font-family:inherit;font-size:.8rem;border:1px solid transparent;background:transparent;border-radius:5px;padding:5px 6px;width:100%;resize:vertical;line-height:1.5;">${esc((o.properties&&o.properties.length?o.properties:[o.property||'']).join('\n'))}</textarea>${(o.properties&&o.properties.length>1)?`<div style="font-size:.66rem;color:var(--gold);font-weight:800;margin-top:2px;">${o.properties.length}物件</div>`:''}</td>
     <td style="width:20%"><input value="${esc(o.atena)}" oninput="RENT.editOwner(${i},'atena',this.value)" placeholder="宛名（〇〇 御中）"></td>
     <td style="width:24%"><input value="${esc(o.email)}" oninput="RENT.editOwner(${i},'email',this.value)" placeholder="メールアドレス"></td>
-    <td style="width:8%;text-align:center;"><label style="display:inline-flex;align-items:center;gap:3px;font-size:.7rem;cursor:pointer;color:${o.exclude?'#c0392b':'var(--muted)'};font-weight:${o.exclude?'800':'400'};"><input type="checkbox" ${o.exclude?'checked':''} onclick="RENT.editOwner(${i},'exclude',this.checked)" style="cursor:pointer;">送信しない</label></td>
+    <td style="width:11%;text-align:center;white-space:nowrap;"><label style="display:inline-flex;align-items:center;gap:5px;font-size:.74rem;cursor:pointer;color:${o.exclude?'#c0392b':'var(--muted)'};font-weight:${o.exclude?'800':'400'};white-space:nowrap;"><input type="checkbox" ${o.exclude?'checked':''} onclick="RENT.editOwner(${i},'exclude',this.checked)" style="cursor:pointer;flex-shrink:0;">送信しない</label></td>
     <td style="width:4%;text-align:center;"><button class="delrow" onclick="RENT.delOwner(${i})" title="削除">×</button></td>
   </tr>`).join("");
   t.innerHTML=`<thead><tr><th>オーナー名</th><th>物件名</th><th>宛名</th><th>メールアドレス</th><th>除外</th><th></th></tr></thead><tbody>${rows}</tbody>`;
@@ -8817,6 +8819,7 @@ function parsePage(t,page){
   m=t.match(/【\s*(\d{4}年\d{2}月)\s*】/); d.month=m?m[1]:"";
   const idx=t.indexOf("収入明細"); const body=(idx>=0?t.slice(idx):t).replace(/\n/g,"");
   d.vac=extractVac(body);
+  d.newc=extractNew(body);
   return d;
 }
 function extractVac(body){
@@ -8829,6 +8832,19 @@ function extractVac(body){
   let re3=/退去予定[\s\u3000]*退去日[：:]\s*(\d{4}年\d{2}月\d{2}日)/g;
   while((m=re3.exec(body))){ const room=roomBefore(body.slice(0,m.index)); const k="退:"+room+m[1]; if(!seen.has(k)){seen.add(k);vac.push({room,type:"解約予定",date:m[1]});} }
   return vac;
+}
+
+/* 新規契約を抽出: 備考欄「新規契約 契約開始日:YYYY年MM月DD日」+ その前の部屋番号 */
+function extractNew(body){
+  const out=[], seen=new Set();
+  function roomBefore(pre){ const ms=[...pre.matchAll(/(\d{3})\s*[^\d\n][^0-9\n]*?\s*26\/\d{2}/g)]; return ms.length?ms[ms.length-1][1]:""; }
+  let m, re=/新規契約[\s\u3000]*契約開始日[：:]\s*(\d{4}年\d{2}月\d{2}日)/g;
+  while((m=re.exec(body))){
+    const room=roomBefore(body.slice(0,m.index));
+    const k=room+m[1];
+    if(!seen.has(k)){ seen.add(k); out.push({room,date:m[1]}); }
+  }
+  return out;
 }
 
 function buildDetail(pages){
@@ -8910,13 +8926,15 @@ async function checkBounces(){
   const setS=m=>{ if(st)st.textContent=m; };
   setS("配信失敗を確認中…（受信箱を検索しています）");
   try{
-    const known=[...new Set(loadHistory().filter(e=>e.kind!=='draft'&&e.to).map(e=>e.to.toLowerCase()))];
-    const r=await window.postToGas(url, { action:'checkBounces', sinceDays:30, knownAddrs:known }, 120000);
+    const r=await window.postToGas(url, { action:'checkBounces', sinceDays:30 }, 120000);
     if(r&&r.ok){
-      const set=new Set((r.bounced||[]).map(a=>(a||"").toLowerCase()));
+      const bouncedAll=new Set((r.bounced||[]).map(a=>(a||"").toLowerCase()));
+      const sentAddrs=[...new Set(loadHistory().filter(e=>e.kind!=='draft'&&e.to).map(e=>e.to.toLowerCase()))];
+      const set=new Set(sentAddrs.filter(a=>bouncedAll.has(a)));
       saveBounced(set);
       const newCount=set.size;
-      setS(newCount? `⚠ 配信失敗 ${newCount} 件を検出しました（赤色で表示）` : "✅ 配信失敗は見つかりませんでした");
+      const failSends=loadHistory().filter(e=>e.kind!=='draft'&&set.has((e.to||"").toLowerCase())).length;
+      setS(newCount? `⚠ 配信できなかったアドレス ${newCount} 件（送信 ${failSends} 件が不達）。赤色で表示しています` : "✅ 配信失敗は見つかりませんでした");
       renderHistory();
       renderPreview();
     }else{
@@ -8971,7 +8989,7 @@ function saveDetailState(){
     // PDFは保存しない。文面編集・送信済みも一緒に保存。
     const slim = detail.map((d,i)=>({
       owner:d.owner, atena:d.atena, email:d.email,
-      props:d.props.map(p=>({bldNo:p.bldNo,property:p.property,amount:p.amount,sokin:p.sokin,month:p.month,pages:p.pages,vac:p.vac})),
+      props:d.props.map(p=>({bldNo:p.bldNo,property:p.property,amount:p.amount,sokin:p.sokin,month:p.month,pages:p.pages,vac:p.vac,newc:p.newc})),
       subjEdited:(document.getElementById("subj-"+i)||{}).value,
       bodyEdited:(document.getElementById("body-"+i)||{}).value
     }));
@@ -9020,6 +9038,22 @@ function fill(s,d){
   } else {
     vacBlock="";
   }
+  // 新規契約(空き予定の文に続けて自動追記)
+  let newcList=[];
+  d.props.forEach(p=>{ (p.newc||[]).forEach(n=>{
+    const pn=p.property||p.bldNo;
+    const room=n.room?n.room+"号室":"お部屋";
+    const dateJ=(n.date||"").replace(/(\d{4})年(\d{2})月(\d{2})日/, "$1年$2月$3日");
+    newcList.push(`${pn} ${room}が${dateJ}より新規契約となりました。`);
+  });});
+  if(newcList.length){
+    let nb=[];
+    if(!vacBlock){ nb.push(""); }
+    nb.push("【新規契約】");
+    newcList.forEach(x=>nb.push("・"+x));
+    nb.push("");
+    vacBlock = vacBlock + nb.join("\n");
+  }
   return s
     .replace(/\{\{宛名\}\}/g, d.atena||d.owner)
     .replace(/\{\{オーナー名\}\}/g, d.owner)
@@ -9063,20 +9097,27 @@ function renderPreview(){
       ?(_isB?`<span class="pill" style="background:#fdecea;color:#c0392b;font-weight:800;">⚠ 不達 ${esc(d.email)}</span>`:`<span class="pill pill-ok">${esc(d.email)}</span>`)
       :`<span class="pill pill-no">メール未登録</span>`;
     const cnt=d.props.length>1?`<span class="pill pill-cnt">${d.props.length}物件まとめ</span>`:"";
-    let boshuN=0, yoteiN=0;
+    let boshuN=0, yoteiN=0, newN=0;
     d.props.forEach(p=>p.vac.forEach(v=>{ if(v.type==="募集中")boshuN++; else yoteiN++; }));
+    d.props.forEach(p=>{ newN+=((p.newc||[]).length); });
     let vacPill="";
     if(boshuN) vacPill+=`<span class="vac">募集中 ${boshuN}</span>`;
     if(yoteiN) vacPill+=`<span class="vac" style="margin-left:6px;color:#a14a3a;">解約予定 ${yoteiN}</span>`;
-    if(!boshuN && !yoteiN) vacPill=`<span class="vac none">満室</span>`;
+    if(newN) vacPill+=`<span class="vac" style="margin-left:6px;color:#2c6e49;font-weight:800;">新規契約 ${newN}</span>`;
+    if(!boshuN && !yoteiN && !newN) vacPill=`<span class="vac none">満室</span>`;
     const pageList=d.props.flatMap(p=>p.pages).sort((a,b)=>a-b);
-    return `<div class="pv-item${(sentSet.has(i))?' sent':''}" id="pvi-${i}">
+    const _sent=sentSet.has(i);
+    const _itemClass=_isB?' sent-fail':(_sent?' sent':'');
+    const _statusBadge=_isB
+      ? '<span class="vac" style="color:#c0392b;font-weight:800;">⚠ 配信できませんでした</span>'
+      : (_sent?'<span class="vac" style="color:#2c6ea1;">✓ 送信済み</span>':'');
+    return `<div class="pv-item${_itemClass}" id="pvi-${i}">
       <div class="pv-head" onclick="RENT.togglePv(${i})">
         <input type="checkbox" class="rent-check" value="${i}" onclick="event.stopPropagation();RENT.updateCheckCount()" ${d.email?'':'disabled title="メール未登録"'} style="width:18px;height:18px;cursor:pointer;flex-shrink:0;accent-color:var(--rt-accent);">
         <span class="nm">${esc(d.owner)}</span>
         ${cnt}
         <span class="spacer"></span>
-        ${(sentSet.has(i))?'<span class="vac" style="color:#2c6ea1;">✓ 送信済み</span>':''}
+        ${_statusBadge}
         ${vacPill}
         ${mailPill}
       </div>
@@ -9107,7 +9148,15 @@ function renderPreview(){
     else { exNote.style.display="none"; }
   }
 }
-function setEmail(i,v){ if(detail&&detail[i]) detail[i].email=v; }
+function setEmail(i,v){
+  if(detail&&detail[i]){
+    const old=(detail[i].email||"").toLowerCase();
+    detail[i].email=v;
+    if((v||"").toLowerCase()!==old){
+      if(sentSet.has(i)){ sentSet.delete(i); saveDetailState(); }
+    }
+  }
+}
 function togglePv(i){ document.getElementById("pvb-"+i).classList.toggle("open"); }
 function expandAll(open){ document.querySelectorAll(".pv-body").forEach(b=>b.classList.toggle("open",open)); }
 function copyBody(i){ const ta=document.getElementById("body-"+i); ta.select(); document.execCommand("copy"); toast("本文をコピーしました"); }
