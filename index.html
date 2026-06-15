@@ -8837,12 +8837,21 @@ function extractVac(body){
 /* 新規契約を抽出: 備考欄「新規契約 契約開始日:YYYY年MM月DD日」+ その前の部屋番号 */
 function extractNew(body){
   const out=[], seen=new Set();
-  function roomBefore(pre){ const ms=[...pre.matchAll(/(\d{3})\s*[^\d\n][^0-9\n]*?\s*26\/\d{2}/g)]; return ms.length?ms[ms.length-1][1]:""; }
-  let m, re=/新規契約[\s\u3000]*契約開始日[：:]\s*(\d{4}年\d{2}月\d{2}日)/g;
+  function roomBefore(pre){
+    let ms=[...pre.matchAll(/(\d{3})\s*[^\d\n][^0-9\n]*?\s*26\/\d{2}/g)];
+    if(ms.length) return ms[ms.length-1][1];
+    ms=[...pre.matchAll(/(\d{3})/g)];
+    return ms.length?ms[ms.length-1][1]:"";
+  }
+  let m, re=/新規契約/g;
   while((m=re.exec(body))){
+    const after=body.slice(m.index, m.index+60);
+    let date="";
+    const dm=after.match(/契約開始日[：:]?\s*(\d{4}年\d{1,2}月\d{1,2}日)/);
+    if(dm) date=dm[1];
     const room=roomBefore(body.slice(0,m.index));
-    const k=room+m[1];
-    if(!seen.has(k)){ seen.add(k); out.push({room,date:m[1]}); }
+    const k=room+"|"+date;
+    if(!seen.has(k)){ seen.add(k); out.push({room,date}); }
   }
   return out;
 }
@@ -9043,8 +9052,8 @@ function fill(s,d){
   d.props.forEach(p=>{ (p.newc||[]).forEach(n=>{
     const pn=p.property||p.bldNo;
     const room=n.room?n.room+"号室":"お部屋";
-    const dateJ=(n.date||"").replace(/(\d{4})年(\d{2})月(\d{2})日/, "$1年$2月$3日");
-    newcList.push(`${pn} ${room}が${dateJ}より新規契約となりました。`);
+    if(n.date){ newcList.push(`${pn} ${room}が${n.date}より新規契約となりました。`); }
+    else { newcList.push(`${pn} ${room}が新規契約となりました。`); }
   });});
   if(newcList.length){
     let nb=[];
