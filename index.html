@@ -9229,14 +9229,24 @@ function fill(s,d){
   if(hasYear){
     vacBlock = vacBlock + "\nなお、本年分の年間収支表もあわせて添付しておりますので、ご確認のほどよろしくお願い申し上げます。\n";
   }
-  return s
+  // 対象月の文言。年間のみ(月額なし=対象月が空)のときは「年間」とし、「【分】」の残骸を防ぐ
+  const monthStr = months.join("・");
+  let out = s
     .replace(/\{\{宛名\}\}/g, d.atena||d.owner)
     .replace(/\{\{オーナー名\}\}/g, d.owner)
-    .replace(/\{\{対象月\}\}/g, months.join("・")||"")
+    .replace(/\{\{対象月\}\}/g, monthStr)
     .replace(/\{\{物件一覧\}\}/g, propList)
     .replace(/\{\{送金合計\}\}/g, totalStr)
     .replace(/\{\{送金日\}\}/g, sokins.join("・")||"")
     .replace(/\{\{空き予定\}\}/g, vacBlock);
+  // 対象月が空(年間のみ)の場合、「【分】」「分の収支報告書」などの残骸を整形
+  if(!monthStr){
+    out = out
+      .replace(/【\s*分\s*】/g, "【年間】")   // 件名 【分】→【年間】
+      .replace(/分の収支報告書/g, "年間の収支報告書")  // 本文 分の収支報告書→年間の収支報告書
+      .replace(/^\s*分\s*/gm, "");          // 行頭の余分な「分」
+  }
+  return out;
 }
 
 function renderPreview(){
@@ -9562,16 +9572,22 @@ async function previewOwnerPdf(i){
     }
   }
   // 年間収支表(あれば)
-  const yb64=await makeYearPdfBase64(d.owner);
+  let yb64=null;
+  try{ yb64=await makeYearPdfBase64(d.owner); }catch(e){ html+=`<div class="pdf-cap" style="background:#fdecea;color:#c0392b;">⚠ 年間PDF生成エラー: ${esc(e.message)}</div>`; }
   if(yb64){
     try{
       const bin=atob(yb64); const arr=new Uint8Array(bin.length);
       for(let k=0;k<bin.length;k++) arr[k]=bin.charCodeAt(k);
       const yblob=new Blob([arr],{type:"application/pdf"});
       const yurl=URL.createObjectURL(yblob);
-      html+=`<div class="pdf-cap" style="background:#f7efdc;color:#8a6d2f;margin-top:10px;">📊 ${esc(d.owner)}_年間収支表.pdf — このPDFも添付されます</div>
-        <iframe src="${yurl}#toolbar=1" title="年間収支表プレビュー"></iframe>`;
-    }catch(e){}
+      html+=`<div class="pdf-cap" style="background:#f7efdc;color:#8a6d2f;margin-top:10px;">📊 ${esc(d.owner)}_年間収支表.pdf — このPDFも添付されます（<a href="${yurl}" target="_blank" style="color:#8a6d2f;text-decoration:underline;">別タブで開く</a>）</div>
+        <iframe src="${yurl}#toolbar=1" title="年間収支表プレビュー" style="width:100%;min-height:400px;"></iframe>`;
+    }catch(e){ html+=`<div class="pdf-cap" style="background:#fdecea;color:#c0392b;">⚠ 年間PDF表示エラー: ${esc(e.message)}</div>`; }
+  } else {
+    // 年間が紐づいているはずなのに取れない場合の手がかり
+    let info="";
+    try{ info = `yearPdfDoc=${!!yearPdfDoc}, yearMapキー数=${Object.keys(yearMap||{}).length}, このオーナーのキー="${norm(d.owner)}", 該当=${!!(yearMap&&yearMap[norm(d.owner)])}`; }catch(e){}
+    if(yearPdfDoc){ html+=`<div class="pdf-cap" style="background:#fff7e6;color:#9a6;margin-top:10px;">年間収支表は見つかりませんでした（${esc(info)}）</div>`; }
   }
   if(!html){ box.innerHTML='<div class="pdf-loading">表示できるPDFがありません（PDFを取り込んでください）</div>'; box.dataset.open="1"; return; }
   box.innerHTML=html;
