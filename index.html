@@ -8767,16 +8767,13 @@ async function handlePdf(file){
       useSystemFonts:true
     }).promise;
     const pages=[];
-    let _allRaw="";
     for(let i=1;i<=doc.numPages;i++){
       const pg=await doc.getPage(i);
       const tc=await pg.getTextContent();
       const text=itemsToText(tc.items);
-      _allRaw += "\n===P"+i+"===\n"+text;
       pages.push(parsePage(text,i));
       stat.textContent=`解析中… ${i}/${doc.numPages}ページ`;
     }
-    window._PDF_RAW=_allRaw;
     buildDetail(pages);
     stat.textContent=`✅ ${doc.numPages}ページを取込・${detail.length}オーナーに仕分けしました`;
     renderPreview();
@@ -8824,7 +8821,6 @@ function parsePage(t,page){
   const bodyLines=(idx>=0?t.slice(idx):t);
   d.vac=extractVac(body);
   d.newc=extractNew(bodyLines);
-  d._rawText=t;
   return d;
 }
 function extractVac(body){
@@ -8867,10 +8863,10 @@ function buildDetail(pages){
   const groups=[]; let cur=null;
   for(const d of pages){
     if(d.pidx===1 || !cur){
-      cur={bldNo:d.bldNo,property:d.property,atena:d.atena,amount:d.amount,sokin:d.sokin,month:d.month,pages:[d.page],vac:[...d.vac]};
+      cur={bldNo:d.bldNo,property:d.property,atena:d.atena,amount:d.amount,sokin:d.sokin,month:d.month,pages:[d.page],vac:[...d.vac],newc:[...(d.newc||[])]};
       groups.push(cur);
     }else{
-      cur.pages.push(d.page); cur.vac.push(...d.vac); if(!cur.property&&d.property)cur.property=d.property;
+      cur.pages.push(d.page); cur.vac.push(...d.vac); cur.newc.push(...(d.newc||[])); if(!cur.property&&d.property)cur.property=d.property;
     }
   }
   // オーナーへ紐付け(宛名 or 物件名)
