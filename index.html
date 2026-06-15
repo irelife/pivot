@@ -3050,8 +3050,32 @@ try{ window.__pushNow = pushNow; }catch(e){}
 // クラウドとローカルを日付単位で統合する。同じ日付が両方にある場合は、
 // 情報量が多い方(in/outが揃っている方)を残し、同点なら既存(ローカル=自分の打刻)を優先。
 function mergeKintai(localK, cloudK){
-  const a = (localK && typeof localK==='object') ? localK : {};
-  const b = (cloudK && typeof cloudK==='object') ? cloudK : {};
+  // 日付キーを "YYYY-MM-DD" に正規化(「Fri Jun 12 2026」形式や先頭'付きも統一)
+  function pad2(n){ return String(n).padStart(2,"0"); }
+  function normKeys(obj){
+    const MON={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+    function one(k){
+      let d=String(k).replace(/^'/, "").trim();
+      if(/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      const m=d.match(/([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})/);
+      if(m && MON[m[1]]){ return m[3]+"-"+pad2(MON[m[1]])+"-"+pad2(parseInt(m[2],10)); }
+      const p=new Date(d);
+      if(!isNaN(p.getTime())){ return p.getFullYear()+"-"+pad2(p.getMonth()+1)+"-"+pad2(p.getDate()); }
+      return d;
+    }
+    const out={};
+    Object.keys(obj||{}).forEach(k=>{
+      const d=one(k);
+      if(out[d]){
+        const sNew=Object.keys(obj[k]||{}).filter(x=>obj[k][x]!==""&&obj[k][x]!=null).length;
+        const sOld=Object.keys(out[d]||{}).filter(x=>out[d][x]!==""&&out[d][x]!=null).length;
+        if(sNew>sOld) out[d]=obj[k];
+      } else { out[d]=obj[k]; }
+    });
+    return out;
+  }
+  const a = normKeys((localK && typeof localK==='object') ? localK : {});
+  const b = normKeys((cloudK && typeof cloudK==='object') ? cloudK : {});
   const out = {};
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   function score(rec){
@@ -8548,11 +8572,36 @@ function switchApp(which){
   const BAK = "pivot_kintai_v1_bak";   // 保険: クラウド取込等でメインが消えても復元できる二重保存
 
   function _parse(s){ try{ return JSON.parse(s||"{}")||{}; }catch(e){ return {}; } }
+  // 日付キーを必ず "YYYY-MM-DD" 形式に統一する。
+  // 「Fri Jun 12 2026 ...」のような形式や、先頭の ' が付いたものも正規化する。
+  function _normalizeKeys(obj){
+    const MON={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+    function one(k){
+      let d=String(k).replace(/^'/, "").trim();
+      if(/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      // 「Fri Jun 12 2026」形式は月名を直接変換(タイムゾーンのずれを防ぐ)
+      const m=d.match(/([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})/);
+      if(m && MON[m[1]]){ return m[3]+"-"+PAD(MON[m[1]])+"-"+PAD(parseInt(m[2],10)); }
+      const p=new Date(d);
+      if(!isNaN(p.getTime())){ return p.getFullYear()+"-"+PAD(p.getMonth()+1)+"-"+PAD(p.getDate()); }
+      return d;
+    }
+    const out={};
+    Object.keys(obj||{}).forEach(k=>{
+      const d=one(k);
+      if(out[d]){
+        const sNew=Object.keys(obj[k]||{}).filter(x=>obj[k][x]!==""&&obj[k][x]!=null).length;
+        const sOld=Object.keys(out[d]||{}).filter(x=>out[d][x]!==""&&out[d][x]!=null).length;
+        if(sNew>sOld) out[d]=obj[k];
+      } else { out[d]=obj[k]; }
+    });
+    return out;
+  }
   // メインとバックアップのうち、エントリ数が多い方(=より新しく打刻済み)を生かす。
   // どちらかが空でも、もう片方から自動復元する自己修復ロード。
   function load(){
-    const main=_parse(localStorage.getItem(KEY));
-    const bak =_parse(localStorage.getItem(BAK));
+    const main=_normalizeKeys(_parse(localStorage.getItem(KEY)));
+    const bak =_normalizeKeys(_parse(localStorage.getItem(BAK)));
     const mN=Object.keys(main).length, bN=Object.keys(bak).length;
     let merged;
     if(bN>mN){ merged=bak; }       // バックアップの方が情報が多い → メインが消されていた
