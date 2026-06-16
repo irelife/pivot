@@ -3120,6 +3120,23 @@ async function doAutoPush(){
     try{ contracts = JSON.parse(localStorage.getItem('contract_kanban_v2') || '{}'); }catch(e){ contracts = {}; }
     let kintai = {};
     try{ kintai = JSON.parse(localStorage.getItem('pivot_kintai_v1') || '{}'); }catch(e){ kintai = {}; }
+    // ===== 安全装置: 手元の物件が空/極端に少ないのにクラウドに多数ある場合は上書きしない =====
+    // (別端末の空データや読込前の状態で、クラウドの正しいデータを消す事故を防ぐ)
+    const localCount = all && typeof all==='object' ? Object.keys(all).length : 0;
+    try{
+      const chk = await postToGas(url, { action:'load' });
+      if(chk && chk.ok){
+        const cloudAll = (chk.payload && chk.payload.buildings) ? chk.payload.buildings : {};
+        const cloudCount = Object.keys(cloudAll).length;
+        // クラウドに3件以上あるのに、手元がその半分未満 → 異常とみなして送信中止
+        if(cloudCount >= 3 && localCount < cloudCount * 0.5){
+          setSyncStatus('error', '⚠️ 安全のため同期を中止(データ保護)');
+          alert('同期を安全のため中止しました。\n\nこの端末の物件数('+localCount+'件)が、クラウド('+cloudCount+'件)より大幅に少ないため、クラウドの正しいデータを誤って消さないよう保護しました。\n\nまずページを再読み込みして、クラウドから最新データを取り込んでください。');
+          _autoPushInFlight = false;
+          return;
+        }
+      }
+    }catch(e){ /* 確認に失敗しても通常の保存は続行 */ }
     const mtime = getLocalMtime() || touchLocalMtime();
     const r = await postToGas(url, { action:'save', payload:{ buildings: all, contracts: contracts, kintai: kintai, mtime: mtime } });
     if(r && r.ok){
