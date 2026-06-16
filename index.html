@@ -3000,6 +3000,15 @@ function saveAll(data){
 let _autoPushTimer = null;
 let _autoPushInFlight = false;
 let _autoPushPending = false;
+let _autoPushStartedAt = 0;   // 送信ロックを取得した時刻(固まり検知用)
+// スマホがバックグラウンドで送信を中断し、ロックが解除されないまま固まった場合の保険。
+// 90秒以上ロックが続いていたら異常とみなして強制解除する。
+function _clearStalePushLock(){
+  if(_autoPushInFlight && _autoPushStartedAt && (Date.now() - _autoPushStartedAt > 90000)){
+    _autoPushInFlight = false;
+    _autoPushPending = false;
+  }
+}
 
 function setSyncStatus(state, text){
   const el = document.getElementById('sync-status');
@@ -3115,8 +3124,10 @@ try{ window.__mergeKintai = mergeKintai; window.__applyCloudKintai = applyCloudK
 async function doAutoPush(){
   const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
   if(!url) return;
+  _clearStalePushLock();   // 固まったロックがあれば解除
   if(_autoPushInFlight){ _autoPushPending = true; return; }
   _autoPushInFlight = true;
+  _autoPushStartedAt = Date.now();
   setSyncStatus('saving', '☁️ 同期中…');
   try{
     const all = loadAll();
@@ -3565,6 +3576,7 @@ async function loginPull(){
 async function forcePullLatest(){
   const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
   if(!url) return;
+  _clearStalePushLock();   // 固まったロックがあれば解除(ロゴ取り込みが詰まらないように)
   // 未保存の変更があれば、確認を出さずに、まず保存(送信)を済ませてから最新を取り込む。
   // (自動保存される仕組みなので、いちいち確認は出さない)
   if(_hasUnsavedChanges || _autoPushInFlight){
@@ -5352,9 +5364,11 @@ function goToTop(){
   if(document.body.classList.contains('tab-kanban')){
     if(typeof switchApp === 'function'){ switchApp('pivot'); }
   }
-  // ※ クラウド取り込み(上書き)はここでは行わない(入力直後のデータが戻る不具合を防止)。
-  //   最新化が必要なときは設定メニューの「クラウドから読込」を使用。
   window.scrollTo(0, 0);
+  // ロゴをタップしたら最新をクラウドから取り込む。
+  // forcePullLatest は「未送信があれば先に送ってから取得 → 勤怠は上書きせず日付単位でマージ」
+  // という安全設計なので、入力直後のデータが戻る事故は起きない。
+  try{ if(typeof forcePullLatest === 'function'){ forcePullLatest(); } }catch(e){}
 }
 
 // ===== 契約管理→PIVOT 連携: 区画の予約行に「予約中」を書き込む =====
