@@ -2073,6 +2073,8 @@ body.tab-kanban .kb-toolbar { display:flex; }
         </button>
         <button class="modal-tab-btn" onclick="closeModal();switchApp('pivot')">Property</button>
         <button class="modal-tab-btn" onclick="closeModal();switchApp('kanban')">Contract</button>
+        <button class="modal-tab-btn" onclick="closeModal();switchApp('kintai')">Attendance</button>
+        <button class="modal-tab-btn" onclick="closeModal();switchApp('rent')">Owner Mail</button>
       </span>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
@@ -8734,13 +8736,16 @@ function switchApp(which){
     </table>`;
 
     wrap.querySelectorAll('input[type=time]').forEach(inp=>{
-      inp.onchange=()=>{
+      const apply=()=>{
         const k=inp.dataset.k, f=inp.dataset.f;
         data[k]=data[k]||{};
         if(inp.value) data[k][f]=inp.value; else delete data[k][f];
         if(!data[k].in && !data[k].out) delete data[k];
         save(data); render(); refreshTodayStatus();
       };
+      // change: 通常の確定時。input: iOSタイムピッカーの「リセット」で値が空になる場合に拾う。
+      inp.onchange=apply;
+      inp.oninput=()=>{ if(inp.value==="") apply(); };
     });
     wrap.querySelectorAll('[data-del]').forEach(b=>{
       b.onclick=()=>{ delete data[b.dataset.del]; save(data); buildMonths(); render(); refreshTodayStatus(); };
