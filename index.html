@@ -1045,6 +1045,20 @@ body.tab-kanban .kb-toolbar { display:flex; }
     cursor: pointer; white-space: nowrap;
   }
   #kb-view .done-item .di-back:hover { background: #f0f0f0; }
+  /* 完了済みモーダル: ステータスバッジ + 行の色分け */
+  #kb-view .done-item .di-status {
+    display: inline-block; font-size: 11px; font-weight: 800; line-height: 1;
+    padding: 4px 9px; border-radius: 999px; margin-top: 4px; letter-spacing: .02em;
+  }
+  #kb-view .done-item.di-done-complete { background: #fff7da; border-color: #f0dca0; }
+  #kb-view .done-item.di-done-complete:hover { background: #fdf3cc; }
+  #kb-view .done-item.di-done-complete .di-date { color: #9a7400; }
+  #kb-view .done-item.di-done-cancel { background: #eef0f2; border-color: #d8dbdf; }
+  #kb-view .done-item.di-done-cancel:hover { background: #e8eaed; }
+  #kb-view .done-item.di-done-cancel .di-title { color: #5b626b; }
+  #kb-view .done-item.di-done-cancel .di-date { color: #7c828a; }
+  #kb-view .done-item.di-done-cancel .di-status { background: #d8dbdf; color: #4a4f56; }
+  #kb-view .done-item.di-done-complete .di-status { background: #f5d772; color: #6b5200; }
   #kb-view .done-empty { text-align: center; color: var(--text-3); padding: 30px; }
   /* 完了タブ(統計バーの完了ピルをボタン化) */
   #kb-view .stat-pill.clickable { cursor: pointer; }
@@ -10566,13 +10580,19 @@ function renderDoneList(){
   body.innerHTML = list.map(c => {
     const roomNo = c.room ? String(c.room).replace(/^P/i,'') : '';
     const dDate = c.archivedAt ? c.archivedAt.slice(0,10).replace(/-/g,'/') : '';
-    return '<div class="done-item">' +
+    // 完了済みカードの確定ステータス: キャンセル/審査落ち or 契約完了
+    let stKey, stLabel, stRowClass, dateLabel;
+    if(c.dealStatus === 'cancel'){ stKey='cancel'; stLabel='キャンセル'; stRowClass='di-done-cancel'; dateLabel='キャンセル'; }
+    else if(c.dealStatus === 'rejected'){ stKey='rejected'; stLabel='審査落ち'; stRowClass='di-done-cancel'; dateLabel='審査落ち'; }
+    else { stKey='complete'; stLabel='契約処理完了'; stRowClass='di-done-complete'; dateLabel='完了'; }
+    return '<div class="done-item ' + stRowClass + '">' +
       '<input type="checkbox" class="di-check" value="' + c.id + '" onclick="event.stopPropagation();KB.updateDoneSelCount()" style="width:20px;height:20px;margin-right:12px;flex:0 0 auto;cursor:pointer;accent-color:#d32f2f;">' +
       '<div class="di-main" onclick="KB.openFromDone(\'' + c.id + '\')" style="cursor:pointer;">' +
         '<div class="di-title">' + esc(c.property || '(物件未入力)') + (roomNo ? ' ' + esc(roomNo) + '号' : '') + '</div>' +
         '<div class="di-sub">' + esc(c.contractor || '(契約者未入力)') + (c.staff ? ' / 担当 ' + esc(c.staff) : '') + '</div>' +
+        '<span class="di-status">' + stLabel + '</span>' +
       '</div>' +
-      (dDate ? '<div class="di-date">完了 ' + dDate + '</div>' : '') +
+      (dDate ? '<div class="di-date">' + dateLabel + ' ' + dDate + '</div>' : '') +
       '<button class="di-back" onclick="KB.returnToBoard(event,\'' + c.id + '\')" title="一覧へ戻す">↩ 一覧へ戻す</button>' +
       '<button class="di-del" onclick="KB.deleteFromDone(event,\'' + c.id + '\')" title="この契約を削除" style="border:none; background:#fdecec; color:#d32f2f; font-size:13px; font-weight:800; padding:8px 14px; border-radius:10px; cursor:pointer; font-family:inherit; white-space:nowrap; margin-left:8px;">🗑 削除</button>' +
     '</div>';
@@ -10661,12 +10681,16 @@ function exportSelectedDoneCsv(){
     const s = (v==null) ? '' : String(v);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
   };
-  const header = ['完了日','種別','申込日','契約日','物件名','部屋番号','契約者','仲介','担当','駐車場',
+  const header = ['ステータス','完了日','種別','申込日','契約日','物件名','部屋番号','契約者','仲介','担当','駐車場',
     '火災保険','駆け付け','電気','請求書','鍵渡しメール','鍵交換','ペット','契約書送付','電子署名','契約書返送','保証電子印','入金','鍵渡し','ひな形送付済み','備考'];
   const rows = ids.map(id => {
     const c = all[id]; if(!c) return null;
     const done = c.archivedAt ? c.archivedAt.slice(0,10) : '';
+    const stLabel = (c.dealStatus === 'cancel') ? 'キャンセル'
+                  : (c.dealStatus === 'rejected') ? '審査落ち'
+                  : '契約処理完了';
     return [
+      stLabel,
       done, c.type||'', c.applyDate||'', c.contractDate||'', c.property||'',
       (c.room ? String(c.room).replace(/^P/i,'') : ''), c.contractor||'', c.broker||'', c.staff||'', c.parking||'',
       c.insurance||'', c.rescue||'', c.electric||'', c.invoice||'', c.keyMail||'', c.keyExchange||'',
