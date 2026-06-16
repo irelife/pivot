@@ -1912,6 +1912,8 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #kintai-view tfoot td{background:#efece3;font-weight:700;}
   #kintai-view .kt-note{color:var(--kt-muted);font-size:.74rem;margin-top:12px;line-height:1.5;}
   #kintai-view .kt-del{color:var(--kt-warn);cursor:pointer;font-size:.95rem;border:none;background:none;}
+  #kintai-view .kt-cell{display:flex;align-items:center;gap:4px;justify-content:center;}
+  #kintai-view .kt-delone{color:var(--kt-warn);cursor:pointer;font-size:.8rem;line-height:1;border:none;background:none;padding:2px 4px;flex:none;}
   </style>
 
   <h1>勤怠管理</h1>
@@ -8718,8 +8720,8 @@ function switchApp(which){
       const cls = wd===0?"kt-sun":(wd===6?"kt-sat":"");
       rows+=`<tr class="${cls}">
         <td>${m}/${d}<br><span style="font-size:.7rem">(${WD[wd]})</span></td>
-        <td><input type="time" value="${rec.in||""}" data-k="${k}" data-f="in"></td>
-        <td><input type="time" value="${rec.out||""}" data-k="${k}" data-f="out"></td>
+        <td><div class="kt-cell"><input type="time" value="${rec.in||""}" data-k="${k}" data-f="in">${rec.in?`<button class="kt-delone" data-delf="${k}" data-delfield="in" title="出勤時刻を削除">×</button>`:""}</div></td>
+        <td><div class="kt-cell"><input type="time" value="${rec.out||""}" data-k="${k}" data-f="out">${rec.out?`<button class="kt-delone" data-delf="${k}" data-delfield="out" title="退勤時刻を削除">×</button>`:""}</div></td>
         <td class="kt-work">${fmtWork(mins)}</td>
         <td>${(rec.in||rec.out)?`<button class="kt-del" data-del="${k}">×</button>`:""}</td>
       </tr>`;
@@ -8742,6 +8744,14 @@ function switchApp(which){
     });
     wrap.querySelectorAll('[data-del]').forEach(b=>{
       b.onclick=()=>{ delete data[b.dataset.del]; save(data); buildMonths(); render(); refreshTodayStatus(); };
+    });
+    wrap.querySelectorAll('[data-delf]').forEach(b=>{
+      b.onclick=()=>{
+        const k=b.dataset.delf, f=b.dataset.delfield;
+        if(data[k]) delete data[k][f];
+        if(data[k] && !data[k].in && !data[k].out) delete data[k];
+        save(data); buildMonths(); render(); refreshTodayStatus();
+      };
     });
   }
 
