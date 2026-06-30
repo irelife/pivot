@@ -1784,6 +1784,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
         <input type="text" id="f-tou">
         <input type="text" id="f-room">
         <input type="text" id="f-parking" oninput="KB.renderSheetItemSummary()">
+        <input type="text" id="f-parkingPrice">
         <input type="text" id="f-contractor">
         <input type="text" id="f-carContractor">
         <input type="text" id="f-corpRep">
@@ -2042,7 +2043,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
         <!-- 左側: 配置図 -->
         <div class="spot-layout-left-img">
           <div class="img-block img-block-layout">
-            <div class="img-block-title">📐 配置図(JPEGのみ・最大2件)</div>
+            <div class="img-block-title">📐 配置図(画像/PDF・最大2件)</div>
             <div class="img-block-content" id="layout-area" ondragover="onImgDragOver(event)" ondragleave="onImgDragLeave(event)" ondrop="onLayoutDrop(event)">
               <!-- ここに動的に画像 or アップロードボタンが表示される -->
             </div>
@@ -5528,6 +5529,11 @@ function linkReservationToSpot(info){
       // 使用中として登録: メイン行に使用者名を書き込み、状況を「使用中(借)」に。
       t.user = info.contractor;
       t.status = '借';
+      // 駐車場の月額が手入力されていれば、使用中の金額に反映
+      {
+        const pp = parseInt(String(info.price == null ? '' : info.price).replace(/[^0-9]/g, ''), 10);
+        if(!isNaN(pp) && pp > 0){ t.price = pp; }
+      }
       // 予約欄は使わないのでクリア(紐づけ解除判定用に res_srcKey だけ残す)
       delete t.res_user; delete t.res_date; delete t.res_tou; delete t.res_room; delete t.res_price; delete t.res_note;
       if(info.srcKey) t.res_srcKey = info.srcKey;
@@ -5539,6 +5545,11 @@ function linkReservationToSpot(info){
       t.res_date = normDate || info.contractDate;
       writtenDate = t.res_date;
       if(info.srcKey) t.res_srcKey = info.srcKey;
+      // 駐車場の月額が手入力されていれば予約金額に反映(到来時に使用中金額へ移る)
+      {
+        const pp = parseInt(String(info.price == null ? '' : info.price).replace(/[^0-9]/g, ''), 10);
+        if(!isNaN(pp) && pp > 0){ t.res_price = pp; }
+      }
       if(info.room){
         const sp = splitTouRoom(info.room);
         t.res_tou = sp.tou;
@@ -7266,13 +7277,13 @@ function renderLayoutArea(){
     html += '<label class="img-upload-btn" title="配置図をアップロード(画像またはPDF・クリック/ドラッグ&ドロップ・最大2件)">' +
       '<span>📐</span><span>+ 配置図を追加</span>' +
       '<span style="font-size:10px;color:#888;">画像/PDF・クリック/ドラッグ&ドロップ</span>' +
-      '<input type="file" accept="image/*" style="display:none" onchange="onLayoutSelected(event)">' +
+      '<input type="file" accept="image/*,application/pdf" style="display:none" onchange="onLayoutSelected(event)">' +
     '</label>';
   } else if(count === 1){
     // 1枚だけ: 画像を大きく見せたいので、追加は小さなリンクのみ
     html += '<label class="img-add-link" title="2枚目の配置図を追加(画像/PDF)">' +
       '<span>＋ 2枚目を追加</span>' +
-      '<input type="file" accept="image/*" style="display:none" onchange="onLayoutSelected(event)">' +
+      '<input type="file" accept="image/*,application/pdf" style="display:none" onchange="onLayoutSelected(event)">' +
     '</label>';
   }
   // count === 2 はアップロードボタンなし
@@ -7368,11 +7379,8 @@ async function onLayoutSelected(event){
 
 // 配置図に複数ファイルを空きスロットへ追加
 async function addLayoutFiles(files){
-  // PDFは受け付けない(JPEG等の画像のみ)
-  const hadPdf = files.some(f => f.type === 'application/pdf');
-  const valid = files.filter(f => f.type.startsWith('image/'));
-  if(valid.length === 0){ showToast(hadPdf ? 'PDFは使えません。JPEGなどの画像を選んでください' : '画像を選んでください'); return; }
-  if(hadPdf){ showToast('PDFは登録できないため除外しました(JPEGのみ対応)'); }
+  const valid = files.filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
+  if(valid.length === 0){ showToast('画像またはPDFを選んでください'); return; }
   for(const f of valid){
     const freeSlot = !_currentImages.layout_id ? 1 : (!_currentImages.layout2_id ? 2 : 0);
     if(freeSlot === 0){ showToast('配置図は最大2件までです'); break; }
@@ -10145,7 +10153,7 @@ function maybeRestoreReservation(c){
         const r = window.PV_linkReservation({
           property: c.property, tou: c.tou, parking: c.parking, room: c.room,
           contractor: resName, contractDate: c.contractDate, srcKey: c.id,
-          silent: true
+          silent: true, price: c.parkingPrice
         });
         if(r && r.ok){ toast('駐車場予約を復活しました'); }
         else if(r && r.reason === 'already'){ toast('駐車場予約はすでに登録済みです'); }
@@ -10681,6 +10689,7 @@ function renderSheetItemSummary(){
   const tmp = {};
   ITEMS.forEach(it => { tmp[it.key] = _editingItemValues[it.key] || ''; });
   tmp.parking = get('f-parking');   // P区画は入力欄から
+  tmp.parkingPrice = get('f-parkingPrice');
   tmp.type = _editingType;          // 法人専用アイテムの表示判定に使う
   // 内部にもP区画値を反映
   _editingItemValues.parking = tmp.parking;
@@ -11180,7 +11189,7 @@ const INFO_FIELDS = [
     inputs:[{id:'f-broker', label:'仲介業者', type:'text'},{id:'f-staff', label:'担当者', type:'text'}],
     value:() => { const b=gv('f-broker'), s=gv('f-staff'); return [b,s].filter(Boolean).join(' / '); } },
   { key:'parking',  icon:'car',      label:'駐車場',
-    inputs:[{id:'f-parking', label:'区画番号', type:'text', ph:'例: P-12'}],
+    inputs:[{id:'f-parking', label:'区画番号', type:'text', ph:'例: P-12'},{id:'f-parkingPrice', label:'駐車場の月額(円・任意)', type:'text', ph:'例: 4400'}],
     value:() => { const p=gv('f-parking'); return p ? ('P' + String(p).replace(/^P[-\s]?/i,'')) : ''; } },
 ];
 function gv(id){ const el=document.getElementById(id); return el ? (el.value||'').trim() : ''; }
@@ -11411,6 +11420,7 @@ function fillForm(c){
   set('f-room', c.room);
   set('f-tou', c.tou);
   set('f-parking', c.parking);
+  set('f-parkingPrice', c.parkingPrice || '');
   set('f-pet', c.pet);
   set('f-contractor', c.contractor);
   set('f-carContractor', c.carContractor);
@@ -11454,6 +11464,7 @@ function buildContractObject(){
     tou: get('f-tou'),
     room: get('f-room'),
     parking: get('f-parking'),
+    parkingPrice: get('f-parkingPrice'),
     pet: _editingItemValues.pet || '',
     contractor: contractor,
     carContractor: get('f-carContractor'),
@@ -11601,7 +11612,8 @@ function linkCurrentToSpot(){
     contractor: resName,
     contractDate: c.contractDate,
     srcKey: c.id,
-    useNow: useNow
+    useNow: useNow,
+    price: c.parkingPrice
   });
   if(res && res.ok){
     _autoSaveWasLinkable = true;
