@@ -2043,7 +2043,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
         <!-- 左側: 配置図 -->
         <div class="spot-layout-left-img">
           <div class="img-block img-block-layout">
-            <div class="img-block-title">📐 配置図(画像/PDF・最大2件)</div>
+            <div class="img-block-title">📐 配置図(JPEGのみ・最大2件)</div>
             <div class="img-block-content" id="layout-area" ondragover="onImgDragOver(event)" ondragleave="onImgDragLeave(event)" ondrop="onLayoutDrop(event)">
               <!-- ここに動的に画像 or アップロードボタンが表示される -->
             </div>
@@ -7277,13 +7277,13 @@ function renderLayoutArea(){
     html += '<label class="img-upload-btn" title="配置図をアップロード(画像またはPDF・クリック/ドラッグ&ドロップ・最大2件)">' +
       '<span>📐</span><span>+ 配置図を追加</span>' +
       '<span style="font-size:10px;color:#888;">画像/PDF・クリック/ドラッグ&ドロップ</span>' +
-      '<input type="file" accept="image/*,application/pdf" style="display:none" onchange="onLayoutSelected(event)">' +
+      '<input type="file" accept="image/*" style="display:none" onchange="onLayoutSelected(event)">' +
     '</label>';
   } else if(count === 1){
     // 1枚だけ: 画像を大きく見せたいので、追加は小さなリンクのみ
     html += '<label class="img-add-link" title="2枚目の配置図を追加(画像/PDF)">' +
       '<span>＋ 2枚目を追加</span>' +
-      '<input type="file" accept="image/*,application/pdf" style="display:none" onchange="onLayoutSelected(event)">' +
+      '<input type="file" accept="image/*" style="display:none" onchange="onLayoutSelected(event)">' +
     '</label>';
   }
   // count === 2 はアップロードボタンなし
@@ -7379,8 +7379,11 @@ async function onLayoutSelected(event){
 
 // 配置図に複数ファイルを空きスロットへ追加
 async function addLayoutFiles(files){
-  const valid = files.filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
-  if(valid.length === 0){ showToast('画像またはPDFを選んでください'); return; }
+  // PDFは受け付けない(JPEG等の画像のみ)
+  const hadPdf = files.some(f => f.type === 'application/pdf');
+  const valid = files.filter(f => f.type.startsWith('image/'));
+  if(valid.length === 0){ showToast(hadPdf ? 'PDFは使えません。JPEGなどの画像を選んでください' : '画像を選んでください'); return; }
+  if(hadPdf){ showToast('PDFは登録できないため除外しました(JPEGのみ対応)'); }
   for(const f of valid){
     const freeSlot = !_currentImages.layout_id ? 1 : (!_currentImages.layout2_id ? 2 : 0);
     if(freeSlot === 0){ showToast('配置図は最大2件までです'); break; }
