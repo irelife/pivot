@@ -10575,6 +10575,12 @@ function openSheet(id){
   renderSheetItemSummary();
   renderSheetDateSummary();
   updateSheetStatusBg();
+  // 開いた時点の駐車場・契約日を前回値として先に記録(初回の不要なダイアログを防ぐ)
+  try{
+    _lastPromptParking = (c && c.parking) ? c.parking : '';
+    _lastPromptContractDate = (c && c.contractDate) ? c.contractDate : '';
+    _autoLinkPromptDismissed = null;
+  }catch(e){}
   document.getElementById('sheet-backdrop').classList.add('active');
   document.getElementById('sheet').classList.add('active');
 }
