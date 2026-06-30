@@ -6822,6 +6822,7 @@ function saveBld(){
     const wasNew = !currentEditId;
     _modalDirty = false;  // 保存できたので未保存状態を解除
     showToast(wasNew ? '✅ 新規登録しました' : '✅ 編集を保存しました');
+    showSaveToast(wasNew ? '✅ 新規登録しました' : '✅ 保存しました');
     if(wasNew){
       // 新規登録時のみ閉じて一覧に戻る
       closeModal();
@@ -6940,6 +6941,33 @@ function showToast(msg){
   t.classList.add('show');
   clearTimeout(window._toastTimer);
   window._toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// 保存完了専用のはっきり目立つ通知(画面中央・大きめ・約2秒)
+function showSaveToast(msg){
+  let el = document.getElementById('save-toast-center');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'save-toast-center';
+    el.style.cssText =
+      'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.9);' +
+      'z-index:99999;background:rgba(17,17,17,0.95);color:#fff;' +
+      'padding:22px 38px;border-radius:16px;font-size:20px;font-weight:800;' +
+      'font-family:inherit;box-shadow:0 10px 40px rgba(0,0,0,0.35);' +
+      'border:2px solid #34c759;opacity:0;pointer-events:none;' +
+      'transition:opacity .18s ease, transform .18s ease;text-align:center;white-space:nowrap;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  requestAnimationFrame(() => {
+    el.style.opacity = '1';
+    el.style.transform = 'translate(-50%,-50%) scale(1)';
+  });
+  clearTimeout(window._saveToastTimer);
+  window._saveToastTimer = setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'translate(-50%,-50%) scale(0.9)';
+  }, 1800);
 }
 
 // ==============================
