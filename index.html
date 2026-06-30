@@ -11487,11 +11487,23 @@ function autoSave(){
   maybeAutoLinkPrompt(c, popupOpen);
 }
 let _autoLinkPromptBusy = false;
+let _lastPromptParking = null;      // 前回時点の駐車場区画(変化検出用)
+let _lastPromptContractDate = null; // 前回時点の契約日(変化検出用)
+let _autoLinkPromptDismissed = null;// 一度キャンセルした組み合わせ(再表示抑止)
 function maybeAutoLinkPrompt(c, popupOpen){
   try{
     if(popupOpen) return;                 // 入力中は邪魔しない
     if(_autoLinkPromptBusy) return;       // ダイアログの多重表示を防ぐ
     if(!c || !c.property || !c.parking || !c.contractDate) return;  // 両方そろっていない
+    // 駐車場(区画)または契約日が今まさに変化したときだけ案内する(無関係なアイテム操作では出さない)
+    const curParking = c.parking || '';
+    const curDate = c.contractDate || '';
+    const changed = (curParking !== _lastPromptParking) || (curDate !== _lastPromptContractDate);
+    _lastPromptParking = curParking;
+    _lastPromptContractDate = curDate;
+    if(!changed) return;
+    const combo = c.id + '|' + curParking + '|' + curDate;
+    if(_autoLinkPromptDismissed === combo) return;
     if(typeof window.PV_hasReservation !== 'function' || typeof window.PV_linkReservation !== 'function') return;
     const resName = (c.type === '法人' && c.carContractor && c.carContractor.trim())
       ? c.carContractor.trim() : c.contractor;
@@ -11503,6 +11515,8 @@ function maybeAutoLinkPrompt(c, popupOpen){
       try{
         if(confirm('契約日と駐車場(区画)が入力されました。\nこの区画に予約として登録しますか?')){
           if(typeof linkCurrentToSpot === 'function'){ linkCurrentToSpot(); }
+        } else {
+          _autoLinkPromptDismissed = combo;
         }
       }catch(e){}
       setTimeout(() => { _autoLinkPromptBusy = false; }, 400);
