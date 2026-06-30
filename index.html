@@ -3053,6 +3053,8 @@ async function doAutoPush(){
     try{ contracts = JSON.parse(localStorage.getItem('contract_kanban_v2') || '{}'); }catch(e){ contracts = {}; }
     let kintai = {};
     try{ kintai = JSON.parse(localStorage.getItem('pivot_kintai_v1') || '{}'); }catch(e){ kintai = {}; }
+    let ownersData = [];
+    try{ ownersData = JSON.parse(localStorage.getItem('rent_owner_send_owners_v1') || '[]'); }catch(e){ ownersData = []; }
     // ===== 安全装置: 手元の物件が空/極端に少ないのにクラウドに多数ある場合は上書きしない =====
     // (別端末の空データや読込前の状態で、クラウドの正しいデータを消す事故を防ぐ)
     const localCount = all && typeof all==='object' ? Object.keys(all).length : 0;
@@ -3071,7 +3073,7 @@ async function doAutoPush(){
       }
     }catch(e){ /* 確認に失敗しても通常の保存は続行 */ }
     const mtime = getLocalMtime() || touchLocalMtime();
-    const r = await postToGas(url, { action:'save', payload:{ buildings: all, contracts: contracts, kintai: kintai, mtime: mtime } });
+    const r = await postToGas(url, { action:'save', payload:{ buildings: all, contracts: contracts, kintai: kintai, owners: ownersData, mtime: mtime } });
     if(r && r.ok){
       _hasUnsavedChanges = false;
       setSyncStatus('saved', '✅ 同期済み');
@@ -3118,6 +3120,7 @@ async function autoPullOnStart(){
           // 勤怠は上書きせず、ローカルとクラウドを日付単位でマージ(複数端末で消えない)
           applyCloudKintai(kintai);
         }
+        if(typeof window.applyCloudOwners === 'function'){ window.applyCloudOwners(payload.owners); }
         if(cloudMtime) { try{ localStorage.setItem(MTIME_KEY, String(cloudMtime)); }catch(e){} }
         if(typeof renderAll === 'function') renderAll();
         if(typeof window.KB !== 'undefined' && typeof window.KB.renderAll === 'function'){ try{ window.KB.renderAll(); }catch(e){} }
@@ -3478,6 +3481,7 @@ async function loginPull(){
     // 勤怠は上書きせず、ローカルとクラウドを日付単位でマージ(複数端末で消えない)
     applyCloudKintai(payload.kintai);
   }
+  if(typeof window.applyCloudOwners === 'function'){ window.applyCloudOwners(payload.owners); }
   const cloudMtime = parseInt(payload.mtime || '0', 10) || Date.now();
   try{ localStorage.setItem(MTIME_KEY, String(cloudMtime)); }catch(e){}
   _hasUnsavedChanges = false;
@@ -3517,6 +3521,7 @@ async function forcePullLatest(){
         // 勤怠は上書きせず、ローカルとクラウドを日付単位でマージ(複数端末で消えない)
         applyCloudKintai(payload.kintai);
       }
+      if(typeof window.applyCloudOwners === 'function'){ window.applyCloudOwners(payload.owners); }
       const cloudMtime = parseInt(payload.mtime || '0', 10) || Date.now();
       try{ localStorage.setItem(MTIME_KEY, String(cloudMtime)); }catch(e){}
       _hasUnsavedChanges = false;
@@ -8551,7 +8556,17 @@ function loadOwners(){
   try{ const s=JSON.parse(localStorage.getItem(LS_OWNERS)); if(Array.isArray(s)&&s.length) return s; }catch(e){}
   return JSON.parse(JSON.stringify(OWNER_SEED));
 }
-function saveOwners(){ localStorage.setItem(LS_OWNERS, JSON.stringify(owners)); }
+function saveOwners(){ localStorage.setItem(LS_OWNERS, JSON.stringify(owners)); if(typeof scheduleAutoPush==='function'){ try{ scheduleAutoPush(); }catch(e){} } }
+/* クラウドから取得した owners をローカルへ反映し、画面を更新する */
+window.applyCloudOwners = function(cloudOwners){
+  if(!Array.isArray(cloudOwners)) return;        // キー無し → 触らない(既存を守る)
+  if(cloudOwners.length === 0) return;            // 空配列 → 触らない(誤消し防止)
+  try{
+    localStorage.setItem(LS_OWNERS, JSON.stringify(cloudOwners));
+    owners = cloudOwners;
+    if(typeof renderOwners === 'function') renderOwners();
+  }catch(e){}
+};
 function resetOwners(){ if(!confirm("オーナー一覧を初期データに戻します。手入力の変更は失われます。よろしいですか?"))return;
   owners=JSON.parse(JSON.stringify(OWNER_SEED)); saveOwners(); renderOwners(); toast("初期データに戻しました"); }
 function loadTmpl(){
