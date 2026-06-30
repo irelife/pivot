@@ -2905,6 +2905,7 @@ function saveAll(data){
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     scheduleAutoPush();   // 変更があったらクラウドへ自動送信(まとめて)
+    try{ if(typeof window.pushFeatureToCloud==='function'){ window.pushFeatureToCloud('buildings'); } }catch(e){}
     return true;
   }catch(e){
     console.error('saveAll error:', e);
@@ -8365,6 +8366,44 @@ async function postToGas(url, body, timeoutMs){
   }
 }
 
+// ===== 機能別の独立保存(まとめ送信とは別に、各機能を単独でクラウドへ保存) =====
+// feature: 'buildings' | 'contracts' | 'owners'
+// 既存のまとめ送信(doAutoPush)はそのまま残し、これは「巻き添え防止の補助経路」として併用する。
+// 失敗しても握りつぶす(本線はまとめ送信なので、補助が落ちても全体は壊さない)。
+async function pushFeatureToCloud(feature){
+  try{
+    const urlEl = document.getElementById('cloud-url');
+    const url = urlEl ? urlEl.value.trim() : '';
+    if(!url) return;
+    let action = '', payload = {};
+    if(feature === 'buildings'){
+      let blds = {};
+      try{ blds = JSON.parse(localStorage.getItem('pivot_blds') || '{}'); }catch(e){ blds = {}; }
+      // 物件0件は送らない(誤って空で上書きしないため。GAS側にも安全装置あり)
+      if(!blds || Object.keys(blds).length === 0) return;
+      action = 'saveBuildings';
+      payload = { buildings: blds };
+    } else if(feature === 'contracts'){
+      let cts = {};
+      try{ cts = JSON.parse(localStorage.getItem('contract_kanban_v2') || '{}'); }catch(e){ cts = {}; }
+      action = 'saveContractsOnly';
+      payload = { contracts: cts };
+    } else if(feature === 'owners'){
+      let ow = [];
+      try{ ow = JSON.parse(localStorage.getItem('rent_owner_send_owners_v1') || '[]'); }catch(e){ ow = []; }
+      action = 'saveOwnersOnly';
+      payload = { owners: ow };
+    } else {
+      return;
+    }
+    await postToGas(url, { action: action, payload: payload }, 30000);
+  }catch(e){
+    // 補助経路なのでエラーは握りつぶす(本線のまとめ送信が別途走る)
+    if(typeof console !== 'undefined') console.warn('pushFeatureToCloud(' + feature + ') skipped:', e && e.message);
+  }
+}
+if(typeof window !== 'undefined'){ window.pushFeatureToCloud = pushFeatureToCloud; }
+
 // 接続テスト
 async function testCloudPing(){
   const url = document.getElementById('cloud-url').value.trim();
@@ -8566,7 +8605,7 @@ function loadOwners(){
   try{ const s=JSON.parse(localStorage.getItem(LS_OWNERS)); if(Array.isArray(s)&&s.length) return s; }catch(e){}
   return JSON.parse(JSON.stringify(OWNER_SEED));
 }
-function saveOwners(){ localStorage.setItem(LS_OWNERS, JSON.stringify(owners)); if(typeof scheduleAutoPush==='function'){ try{ scheduleAutoPush(); }catch(e){} } }
+function saveOwners(){ localStorage.setItem(LS_OWNERS, JSON.stringify(owners)); if(typeof scheduleAutoPush==='function'){ try{ scheduleAutoPush(); }catch(e){} } try{ if(typeof window.pushFeatureToCloud==='function'){ window.pushFeatureToCloud('owners'); } }catch(e){} }
 /* クラウドから取得した owners をローカルへ反映し、画面を更新する */
 window.applyCloudOwners = function(cloudOwners){
   if(!Array.isArray(cloudOwners)) return;        // キー無し → 触らない(既存を守る)
@@ -9476,6 +9515,7 @@ function saveAll(d){
     if(typeof window.__pushNow === 'function'){ window.__pushNow(); }
     else if(typeof window.__scheduleAutoPush === 'function'){ window.__scheduleAutoPush(); }
   }catch(e){}
+  try{ if(typeof window.pushFeatureToCloud==='function'){ window.pushFeatureToCloud('contracts'); } }catch(e){}
 }
 function genId(){ return 'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function today(){ return new Date().toISOString().slice(0,10); }
