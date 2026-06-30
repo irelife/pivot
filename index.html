@@ -3058,6 +3058,7 @@ async function doAutoPush(){
     // ===== 安全装置: 手元の物件が空/極端に少ないのにクラウドに多数ある場合は上書きしない =====
     // (別端末の空データや読込前の状態で、クラウドの正しいデータを消す事故を防ぐ)
     const localCount = all && typeof all==='object' ? Object.keys(all).length : 0;
+    const localContractCount = contracts && typeof contracts==='object' ? Object.keys(contracts).length : 0;
     try{
       const chk = await postToGas(url, { action:'load' });
       if(chk && chk.ok){
@@ -3067,6 +3068,15 @@ async function doAutoPush(){
         if(cloudCount >= 3 && localCount < cloudCount * 0.5){
           setSyncStatus('error', '⚠️ 安全のため同期を中止(データ保護)');
           alert('同期を安全のため中止しました。\n\nこの端末の物件数('+localCount+'件)が、クラウド('+cloudCount+'件)より大幅に少ないため、クラウドの正しいデータを誤って消さないよう保護しました。\n\nまずページを再読み込みして、クラウドから最新データを取り込んでください。');
+          _autoPushInFlight = false;
+          return;
+        }
+        // 契約の安全装置: 手元の契約がクラウドより大幅に少なければ上書きしない
+        const cloudContracts = (chk.payload && chk.payload.contracts) ? chk.payload.contracts : {};
+        const cloudContractCount = Object.keys(cloudContracts).length;
+        if(cloudContractCount >= 3 && localContractCount < cloudContractCount * 0.5){
+          setSyncStatus('error', '⚠️ 安全のため同期を中止(契約データ保護)');
+          alert('同期を安全のため中止しました。\n\nこの端末の契約数('+localContractCount+'件)が、クラウド('+cloudContractCount+'件)より大幅に少ないため、クラウドの正しい契約データ(完了カードなど)を誤って消さないよう保護しました。\n\nまずページを再読み込みして、クラウドから最新データを取り込んでください。');
           _autoPushInFlight = false;
           return;
         }
