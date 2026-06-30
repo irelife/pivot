@@ -7980,124 +7980,50 @@ function csvImport(){
   let dupBld = sameNameBlds.find(b => normalizeAddr(b.addr||'') === inputAddrN);
   let dupSpots = dupBld ? (dupBld.spots||[]) : [];
 
-  let mode = 'new'; // 'new' | 'overwrite' | 'append' | 'merge'
+  // CSVインポートは常に「完全置換(overwrite)」に統一する。
+  //  ・同名+同住所が1件 → その物件を完全置換
+  //  ・同名で複数(住所違い含む) → どの住所の物件に置換するか番号で選ぶ
+  //  ・同名なし → 新規登録
+  let mode = 'new'; // 'new' | 'overwrite'
   if(dupBld){
-    // 同名+同住所 → 4択ダイアログ
-    const choice = prompt(
-      '⚠ 同じ物件「' + name + '」(住所も一致)が既に登録されています。\n' +
-      '住所: ' + (dupBld.addr||'(未入力)') + '\n' +
-      '既存: 区画 ' + dupSpots.length + ' 件 (使用中 ' + dupSpots.filter(s=>s.status==='借').length + ' 件)\n' +
-      '新規: 区画 ' + spots.length + ' 件\n\n' +
-      'どう登録しますか？番号を入力してください:\n\n' +
-      '  1 = 上書き(既存の区画を全て削除して新しいデータで置き換え)\n' +
-      '  2 = 区画を追加(既存に新しい区画を追加。区画番号が衝突する場合は新規データで上書き)\n' +
-      '  3 = マージ(CSVに書いた項目だけ更新。空欄は既存維持。書いてない区画は既存のまま)\n' +
-      '  4 = 中止(何もしない)\n',
-      '4'
-    );
-    if(choice === null || choice.trim() === '4' || choice.trim() === ''){
-      return; // 中止
-    }
-    if(choice.trim() === '1'){
+    mode = 'overwrite';
+  } else if(sameNameBlds.length === 1){
+    const b0 = sameNameBlds[0];
+    if(confirm(
+      '同じ物件名「' + name + '」が登録されています。\n\n' +
+      '既存の住所: ' + (b0.addr || '(住所未入力)') + ' (区画 ' + ((b0.spots||[]).length) + '件)\n' +
+      '今回の住所: ' + (addr || '(住所未入力)') + '\n\n' +
+      'この既存物件を、今回のCSV内容で完全に置き換えますか?\n' +
+      '【OK】既存物件に置換　【キャンセル】別物件として新規登録'
+    )){
+      dupBld = b0;
+      dupSpots = dupBld.spots || [];
       mode = 'overwrite';
-    } else if(choice.trim() === '2'){
-      mode = 'append';
-    } else if(choice.trim() === '3'){
-      mode = 'merge';
     } else {
-      alert('無効な選択です。中止しました。');
-      return;
+      mode = 'new';
     }
-  } else if(sameNameBlds.length > 0){
-    // 同名だが住所が異なる→新規/上書き/追加/中止 を選択
-    const existingAddrs = sameNameBlds.map((b, i) => '  [' + (i+1) + '] ' + (b.addr || '(住所未入力)') + ' (区画 ' + ((b.spots||[]).length) + '件)').join('\n');
-    // 件数に応じてラベルを変える
-    let optionLabel;
-    if(sameNameBlds.length === 1){
-      optionLabel =
-        '  1 = 別物件として新規登録\n' +
-        '  2 = 上の既存物件に【上書き】(住所も今回のもので置換)\n' +
-        '  3 = 上の既存物件に【区画を追加】(住所はそのまま)\n' +
-        '  4 = 上の既存物件に【マージ】(書いた項目だけ更新、空欄は既存維持)\n' +
-        '  5 = 中止';
-    } else {
-      optionLabel =
-        '  0 = 別物件として新規登録\n' +
-        '  1〜' + sameNameBlds.length + ' = その番号の既存物件に【上書き】(住所も今回のもので置換)\n' +
-        '  追加(' + sameNameBlds.length + '件): 番号の前に「a」を付ける(例: a1)\n' +
-        '  マージ(' + sameNameBlds.length + '件): 番号の前に「m」を付ける(例: m1)\n' +
-        '  c = 中止';
-    }
+  } else if(sameNameBlds.length > 1){
+    const list = sameNameBlds.map((b, k) => '  ' + (k+1) + ' = ' + (b.addr || '(住所未入力)') + ' (区画 ' + ((b.spots||[]).length) + '件)').join('\n');
     const choice = prompt(
-      '同じ物件名「' + name + '」が ' + sameNameBlds.length + ' 件、別住所で登録されています:\n\n' +
-      existingAddrs + '\n\n' +
-      '今回の住所:\n・' + (addr || '(住所未入力)') + '\n\n' +
-      'どう登録しますか？以下から選んで入力してください:\n\n' +
-      optionLabel,
-      (sameNameBlds.length === 1) ? '5' : 'c'
+      '同じ物件名「' + name + '」が ' + sameNameBlds.length + ' 件あります。\n' +
+      'どの住所の物件に置き換えますか? 番号を入力してください:\n\n' +
+      list + '\n' +
+      '  0 = 別物件として新規登録\n' +
+      '  c = 中止',
+      '0'
     );
     if(choice === null) return;
     const c = choice.trim().toLowerCase();
-    if(c === '' || c === 'c'){
-      return; // 中止
-    }
-    // 既存1件のときの単純な数字選択
-    if(sameNameBlds.length === 1){
-      if(c === '1'){
-        // 新規登録(下のフォールスルー処理に進む)
-      } else if(c === '2'){
-        dupBld = sameNameBlds[0];
-        dupSpots = dupBld.spots || [];
-        mode = 'overwrite';
-      } else if(c === '3'){
-        dupBld = sameNameBlds[0];
-        dupSpots = dupBld.spots || [];
-        mode = 'append';
-      } else if(c === '4'){
-        dupBld = sameNameBlds[0];
-        dupSpots = dupBld.spots || [];
-        mode = 'merge';
-      } else if(c === '5'){
-        return;
-      } else {
-        alert('無効な選択です。中止しました。');
-        return;
-      }
+    if(c === 'c' || c === '') return;
+    if(c === '0'){ mode = 'new'; }
+    else if(/^[0-9]+$/.test(c)){
+      const idx = parseInt(c, 10) - 1;
+      if(idx < 0 || idx >= sameNameBlds.length){ alert('無効な番号です。中止しました。'); return; }
+      dupBld = sameNameBlds[idx];
+      dupSpots = dupBld.spots || [];
+      mode = 'overwrite';
     } else {
-      // 既存複数件のとき
-      if(c === '0'){
-        // 新規登録(下のフォールスルー処理に進む)
-      } else if(/^m([0-9]+)$/.test(c)){
-        const idx = parseInt(c.substring(1), 10) - 1;
-        if(idx < 0 || idx >= sameNameBlds.length){
-          alert('無効な番号です。中止しました。');
-          return;
-        }
-        dupBld = sameNameBlds[idx];
-        dupSpots = dupBld.spots || [];
-        mode = 'merge';
-      } else if(/^a([0-9]+)$/.test(c)){
-        const idx = parseInt(c.substring(1), 10) - 1;
-        if(idx < 0 || idx >= sameNameBlds.length){
-          alert('無効な番号です。中止しました。');
-          return;
-        }
-        dupBld = sameNameBlds[idx];
-        dupSpots = dupBld.spots || [];
-        mode = 'append';
-      } else if(/^[0-9]+$/.test(c)){
-        const idx = parseInt(c, 10) - 1;
-        if(idx < 0 || idx >= sameNameBlds.length){
-          alert('無効な番号です。中止しました。');
-          return;
-        }
-        dupBld = sameNameBlds[idx];
-        dupSpots = dupBld.spots || [];
-        mode = 'overwrite';
-      } else {
-        alert('無効な入力です。中止しました。');
-        return;
-      }
+      alert('無効な入力です。中止しました。'); return;
     }
   }
 
@@ -8107,6 +8033,12 @@ function csvImport(){
     }
   }
 
+  // _raw は内部用フィールドなので保存前に除去するヘルパー(使用前に定義)
+  const stripRaw = (s) => {
+    const copy = Object.assign({}, s);
+    delete copy._raw;
+    return copy;
+  };
   // 最終確認メッセージをモードに合わせて変える
   let finalMsg = '';
   if(mode === 'overwrite'){
@@ -8137,12 +8069,6 @@ function csvImport(){
     return;
   }
 
-  // _raw は内部用フィールドなので保存前に除去するヘルパー
-  const stripRaw = (s) => {
-    const copy = Object.assign({}, s);
-    delete copy._raw;
-    return copy;
-  };
 
   if(mode === 'merge'){
     // 既存物件に区画を「項目単位で」マージ
