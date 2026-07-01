@@ -1902,9 +1902,16 @@ body.tab-kanban .kb-toolbar { display:flex; }
         <div class="sub">年間収支一覧表PDF（複数ページ可）</div>
         <input type="file" id="pdfInputYear" accept="application/pdf">
       </label>
+      <label class="drop" id="dropPay" style="flex:1;min-width:280px;border-color:#6a9ac9;">
+        <div class="ico">💳</div>
+        <div class="big">③ 振込明細をドロップ / クリック（IRE宛のみ添付）</div>
+        <div class="sub">振込明細PDF（asano@i-r-e.jp にだけ添付されます）</div>
+        <input type="file" id="pdfInputPay" accept="application/pdf">
+      </label>
     </div>
     <div class="pdfstat" id="pdfStat"></div>
     <div class="pdfstat" id="pdfStatYear" style="color:#9a7b3a;"></div>
+    <div class="pdfstat" id="pdfStatPay" style="color:#3a6d9a;"></div>
 
     <div class="bar">
       <h2>送信プレビュー</h2>
@@ -8654,6 +8661,29 @@ if(dropYear){
   pdfInputYear.addEventListener("change",ev=>{ const f=ev.target.files[0]; if(f) handleYearPdf(f); });
 }
 
+// 振込明細のドロップ処理(IRE宛のみ添付。仕分け不要=PDF全体をそのまま保持)
+let payPdfBase64 = null;
+let payPdfName = "";
+const dropPay=document.getElementById("dropPay"), pdfInputPay=document.getElementById("pdfInputPay");
+if(dropPay){
+  ["dragover","dragenter"].forEach(e=>dropPay.addEventListener(e,ev=>{ev.preventDefault();dropPay.classList.add("over");}));
+  ["dragleave","drop"].forEach(e=>dropPay.addEventListener(e,ev=>{ev.preventDefault();dropPay.classList.remove("over");}));
+  dropPay.addEventListener("drop",ev=>{ const f=ev.dataTransfer.files[0]; if(f) handlePayPdf(f); });
+  pdfInputPay.addEventListener("change",ev=>{ const f=ev.target.files[0]; if(f) handlePayPdf(f); });
+}
+async function handlePayPdf(file){
+  if(file.type!=="application/pdf"){ toast("PDFファイルを選んでください"); return; }
+  const stat=document.getElementById("pdfStatPay");
+  if(stat) stat.textContent="振込明細 読み込み中…";
+  try{
+    const dataUrl = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
+    payPdfBase64 = (dataUrl.indexOf(",")>=0) ? dataUrl.split(",")[1] : dataUrl;
+    payPdfName = file.name || "振込明細.pdf";
+    if(stat) stat.textContent="💳 振込明細を取り込みました（IRE宛 asano@i-r-e.jp にのみ添付されます）";
+    if(typeof RENT!=="undefined" && RENT.renderPreview) { try{ RENT.renderPreview(); }catch(e){} }
+  }catch(e){ if(stat) stat.textContent="⚠ 振込明細の読み込みに失敗しました: "+e.message; }
+}
+
 // 年間収支表PDFを取り込み、「オーナー名 ： ◯◯」で各オーナーに仕分け
 async function handleYearPdf(file){
   if(file.type!=="application/pdf"){ toast("PDFファイルを選んでください"); return; }
@@ -9198,6 +9228,14 @@ async function makeOwnerPdfBlob(i){
 }
 
 /* オーナーiのPDFをBase64文字列で取得(GAS送信用) */
+// PDFドキュメント全体を丸ごとBase64化(IRE宛の「全オーナー分」添付用)
+async function makeFullPdfBase64(srcDoc){
+  if(!srcDoc){ return null; }
+  try{
+    const b64 = await srcDoc.saveAsBase64();
+    return b64;
+  }catch(e){ console.error("makeFullPdfBase64:", e); return null; }
+}
 async function makeOwnerPdfBase64(i){
   if(!pdfDoc){ return null; }
   const d=detail[i];
@@ -9244,14 +9282,24 @@ async function buildMailPayload(indexes, statusFn){
     const to=(d.email||"").trim();
     const subject=buildSubject(d);
     const body=buildBody(d);
-    // 月額明細PDF(月額が取り込まれていれば)
-    const pdfBase64= pdfDoc ? await makeOwnerPdfBase64(i) : null;
     const month=(d.props[0]&&d.props[0].month||"").replace(/[年月]/g,"");
-    const pdfName= pdfBase64 ? `${d.owner}_明細_${month}.pdf`.replace(/\s/g,"") : "";
-    // 年間収支表があれば2つ目の添付として追加
-    const pdfBase64_2=await makeYearPdfBase64(d.owner);
-    const pdfName_2=pdfBase64_2 ? `${d.owner}_年間収支表.pdf`.replace(/\s/g,"") : "";
-    arr.push({ to, subject, body, pdfBase64, pdfName, pdfBase64_2, pdfName_2, owner:d.owner });
+    // IRE(asano@i-r-e.jp)宛だけは、振り分けず「全オーナー分を丸ごと」添付する
+    const isIRE = (to.toLowerCase() === "asano@i-r-e.jp");
+    let pdfBase64, pdfName, pdfBase64_2, pdfName_2, pdfBase64_3="", pdfName_3="";
+    if(isIRE){
+      pdfBase64 = pdfDoc ? await makeFullPdfBase64(pdfDoc) : null;
+      pdfName   = pdfBase64 ? `月額明細_全オーナー_${month}.pdf`.replace(/\s/g,"") : "";
+      pdfBase64_2 = yearPdfDoc ? await makeFullPdfBase64(yearPdfDoc) : null;
+      pdfName_2   = pdfBase64_2 ? `年間収支表_全オーナー.pdf`.replace(/\s/g,"") : "";
+      pdfBase64_3 = payPdfBase64 || "";
+      pdfName_3   = payPdfBase64 ? (payPdfName || "振込明細.pdf").replace(/\s/g,"") : "";
+    } else {
+      pdfBase64 = pdfDoc ? await makeOwnerPdfBase64(i) : null;
+      pdfName   = pdfBase64 ? `${d.owner}_明細_${month}.pdf`.replace(/\s/g,"") : "";
+      pdfBase64_2 = await makeYearPdfBase64(d.owner);
+      pdfName_2   = pdfBase64_2 ? `${d.owner}_年間収支表.pdf`.replace(/\s/g,"") : "";
+    }
+    arr.push({ to, subject, body, pdfBase64, pdfName, pdfBase64_2, pdfName_2, pdfBase64_3, pdfName_3, owner:d.owner });
   }
   return arr;
 }
