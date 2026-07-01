@@ -1815,7 +1815,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
       </div>
       <!-- アイコン式フィールド(クリックで入力) -->
       <div class="info-icons" id="info-icons"></div>
-      <div style="margin-top:10px; display:grid; grid-template-columns:repeat(7, 1fr); gap:7px;">
+      <div style="margin-top:10px; display:grid; grid-template-columns:1fr 2fr 1fr 1fr 1fr 1fr 1fr; gap:7px;">
         <button class="btn-link-spot" id="btn-link-spot" onclick="KB.linkCurrentToSpot()" title="物件管理の該当区画の予約欄に予約中として登録します" style="grid-column:7; width:100%; padding-left:0; padding-right:0; text-align:center;">🅿 紐づけ</button>
       </div>
       <div class="info-hint">💡 アイコンをクリックすると入力できます(契約者種別はクリックで切替)</div>
@@ -11185,6 +11185,8 @@ const INFO_ICON = {
 };
 // フィールド定義(各アイコンに紐づく入力欄)
 const INFO_FIELDS = [
+  { key:'monthly',  icon:'building',  label:'マンスリー', monthly:true,
+    value:() => '' },
   { key:'property', icon:'building', label:'物件',
     wide:true,
     inputs:[{id:'f-property', label:'物件名', type:'text'},{id:'f-tou', label:'棟', type:'tou-select', ph:'棟を選択'},{id:'f-room', label:'号数', type:'text', ph:'例: 101'}],
@@ -11208,8 +11210,6 @@ const INFO_FIELDS = [
   { key:'parking',  icon:'car',      label:'駐車場',
     inputs:[{id:'f-parking', label:'区画番号', type:'text', ph:'例: P-12'},{id:'f-parkingPrice', label:'駐車場の月額(円・任意)', type:'text', ph:'例: 4400'}],
     value:() => { const p=gv('f-parking'); return p ? ('P' + String(p).replace(/^P[-\s]?/i,'')) : ''; } },
-  { key:'monthly',  icon:'building',  label:'マンスリー', monthly:true,
-    value:() => '' },
 ];
 function gv(id){ const el=document.getElementById(id); return el ? (el.value||'').trim() : ''; }
 function fmtDateVal(v){ return v ? v.slice(5).replace('-','/') : ''; }
@@ -11889,6 +11889,7 @@ try{window.KB.toggleSheetDate=toggleSheetDate;}catch(e){}
 try{window.KB.toggleSheetItem=toggleSheetItem;}catch(e){}
 try{window.KB.toggleStageReached=toggleStageReached;}catch(e){}
 try{window.KB.toggleTypeField=toggleTypeField;}catch(e){}
+try{window.KB.toggleMonthlyField=toggleMonthlyField;}catch(e){}
 try{window.KB.setContractorType=setContractorType;}catch(e){}
 try{window.KB.updateSortButtons=updateSortButtons;}catch(e){}
 
@@ -11979,6 +11980,7 @@ try{window.toggleSheetDate=toggleSheetDate;}catch(e){}
 try{window.toggleSheetItem=toggleSheetItem;}catch(e){}
 try{window.toggleStageReached=toggleStageReached;}catch(e){}
 try{window.toggleTypeField=toggleTypeField;}catch(e){}
+try{window.toggleMonthlyField=toggleMonthlyField;}catch(e){}
 try{window.updateSortButtons=updateSortButtons;}catch(e){}
 })();
 
