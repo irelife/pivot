@@ -902,6 +902,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #kb-view .ct-badge img { width: 28px; height: 28px; }
   #kb-view .ct-body { flex: 1; min-width: 0; }
   #kb-view .ct-body .card-title { display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline; font-size: 33px; font-weight: 800; color: #1c1c1e; margin-bottom: 3px; }
+  #kb-view .ct-monthly-badge { display:inline-block; background:#1a7fd4; color:#fff; font-size:16px; font-weight:800; padding:2px 12px; border-radius:999px; margin:2px 0 5px; letter-spacing:1px; }
   #kb-view .ct-body .t-room, #kb-view .ct-body .t-park { font-size: 28px; font-weight: 700; color: #5b6b7b; }
   #kb-view .ct-body .card-sub { font-size: 14px; color: #6b6b70; margin-bottom: 8px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
   #kb-view .ct-type-badge {
@@ -1054,6 +1055,10 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #kb-view .done-item.di-done-cancel .di-date { color: #7c828a; }
   #kb-view .done-item.di-done-cancel .di-status { background: #d8dbdf; color: #4a4f56; }
   #kb-view .done-item.di-done-complete .di-status { background: #f5d772; color: #6b5200; }
+  #kb-view .done-item.di-done-monthly { background: #e4f1fc; border-color: #9cc8ee; border-left: 6px solid #1a7fd4; }
+  #kb-view .done-item.di-done-monthly:hover { background: #d8eafa; }
+  #kb-view .done-item.di-done-monthly .di-date { color: #0a5a9e; }
+  #kb-view .done-item.di-done-monthly .di-status { background: #1a7fd4; color: #fff; }
   #kb-view .done-empty { text-align: center; color: var(--text-3); padding: 30px; }
   /* 完了タブ(統計バーの完了ピルをボタン化) */
   #kb-view .stat-pill.clickable { cursor: pointer; }
@@ -9869,10 +9874,12 @@ function isContractComplete(c){
   return true;
 }
 // カードの状態色: complete(青) / defect(赤・基本情報未完了) / almost(緑 17〜19) / progress(紫 16以下)
+// マンスリー区分かどうか
+function isMonthly(c){ return !!(c && c.dealStatus === 'monthly'); }
 function cardStatus(c){
-  // 手動でキャンセル・審査落ちに設定されている場合は最優先(グレー)
   if(isCancelStatus(c)) return 'cancel';
   if(isContractComplete(c)) return 'complete';
+  if(isMonthly(c)) return 'monthly';
   if(!basicInfoComplete(c)) return 'defect';
   const done = contractProgress(c).done;
   if(done >= 17) return 'almost';
@@ -9888,6 +9895,7 @@ const DEAL_STATUSES = [
   { key:'condition',  label:'条件確認中',       text:'#0a6e8e', bg:'#d4f0fb', tone:'progress' },
   { key:'doc_making', label:'契約書類作成中',   text:'#3b39b5', bg:'#e4e3fb', tone:'progress' },
   { key:'doc_done',   label:'契約書類作成完了', text:'#7a2fa6', bg:'#f0e1fa', tone:'progress' },
+  { key:'monthly',    label:'マンスリー',       text:'#0a5a9e', bg:'#d4e8fb', tone:'monthly' },
   { key:'cancel',     label:'キャンセル',       text:'#5b626b', bg:'#e4e6ea', tone:'cancel' },
   { key:'rejected',   label:'審査落ち',         text:'#7a3a3a', bg:'#ecdede', tone:'cancel' },
 ];
@@ -9920,7 +9928,7 @@ function dropdownStatus(c){
   }
   return 'apply';
 }
-const STATUS_COLOR = { complete:'#f5b400', defect:'#e60012', almost:'#34c759', progress:'#8e44d8', cancel:'#9aa1aa' };
+const STATUS_COLOR = { complete:'#f5b400', defect:'#e60012', almost:'#34c759', progress:'#8e44d8', cancel:'#9aa1aa', monthly:'#1a7fd4' };
 function progressCurrentIndex(c){
   let idx = -1;
   PROGRESS_STEPS.forEach((s, i) => { if(s.done(c)) idx = i; });
@@ -10061,6 +10069,7 @@ function renderCard(c){
       '</div>' +
       '<div class="ct-body">' +
         '<div class="card-title">' + titleLine + '</div>' +
+        (isMonthly(c) ? '<div class="ct-monthly-badge">マンスリー</div>' : '') +
         '<div class="card-sub">' +
           '<span class="card-name">' + esc(c.contractor || '(契約者未入力)') + '</span>' +
         '</div>' +
@@ -10349,6 +10358,7 @@ function renderDoneList(){
     let stKey, stLabel, stRowClass, dateLabel;
     if(c.dealStatus === 'cancel'){ stKey='cancel'; stLabel='キャンセル'; stRowClass='di-done-cancel'; dateLabel='キャンセル'; }
     else if(c.dealStatus === 'rejected'){ stKey='rejected'; stLabel='審査落ち'; stRowClass='di-done-cancel'; dateLabel='審査落ち'; }
+    else if(c.dealStatus === 'monthly'){ stKey='monthly'; stLabel='マンスリー(完了)'; stRowClass='di-done-monthly'; dateLabel='完了'; }
     else { stKey='complete'; stLabel='契約処理完了'; stRowClass='di-done-complete'; dateLabel='完了'; }
     return '<div class="done-item ' + stRowClass + '">' +
       '<input type="checkbox" class="di-check" value="' + c.id + '" onclick="event.stopPropagation();KB.updateDoneSelCount()" style="width:20px;height:20px;margin-right:12px;flex:0 0 auto;cursor:pointer;accent-color:#d32f2f;">' +
