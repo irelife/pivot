@@ -903,8 +903,12 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #kb-view .ct-body { flex: 1; min-width: 0; }
   #kb-view .ct-body .card-title { display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline; font-size: 33px; font-weight: 800; color: #1c1c1e; margin-bottom: 3px; }
   #kb-view .ct-monthly-badge { display:inline-block; background:#1a7fd4; color:#fff; font-size:16px; font-weight:800; padding:2px 12px; border-radius:999px; margin:2px 0 5px; letter-spacing:1px; }
-  .sheet-monthly-chk { display:inline-flex; align-items:center; gap:6px; margin-left:16px; font-size:15px; font-weight:700; color:#0a5a9e; cursor:pointer; user-select:none; }
-  .sheet-monthly-chk input { width:18px; height:18px; accent-color:#1a7fd4; cursor:pointer; }
+  /* マンスリーカード: ONで青、OFFでグレー表示 */
+  #kb-view .info-icon.info-monthly-on { border-color:#1a7fd4 !important; background:#e4f1fc !important; }
+  #kb-view .info-icon.info-monthly-on .info-ico-svg svg { stroke:#1a7fd4; }
+  #kb-view .info-icon.info-monthly-on .info-ico-label { color:#0a5a9e; }
+  #kb-view .info-monthly-val { color:#0a5a9e; font-weight:800; }
+  #kb-view .info-monthly-off { color:#9aa1aa; font-weight:700; }
   #kb-view .ct-body .t-room, #kb-view .ct-body .t-park { font-size: 28px; font-weight: 700; color: #5b6b7b; }
   #kb-view .ct-body .card-sub { font-size: 14px; color: #6b6b70; margin-bottom: 8px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
   #kb-view .ct-type-badge {
@@ -1780,7 +1784,6 @@ body.tab-kanban .kb-toolbar { display:flex; }
   <div class="sheet-grabber"></div>
   <div class="sheet-header">
     <h2 id="sheet-title">新規契約</h2>
-    <label class="sheet-monthly-chk" title="この契約をマンスリーにする"><input type="checkbox" id="f-monthly" onchange="KB.onMonthlyToggle(event)"> マンスリー</label>
     <button class="sheet-close" onclick="KB.closeSheet()">×</button>
   </div>
   <div class="sheet-body">
@@ -10592,8 +10595,7 @@ function openSheet(id){
   _editingId = id || null;
   const c = id ? loadAll()[id] : null;
   document.getElementById('sheet-title').textContent = id ? '契約の編集' : '新規契約';
-  const _mchk = document.getElementById('f-monthly');
-  if(_mchk){ _mchk.checked = !!(c && c.dealStatus === 'monthly'); }
+  _editingMonthly = !!(c && c.dealStatus === 'monthly');
   var _delBtn = document.getElementById('btn-delete');
   if(_delBtn){ _delBtn.style.display = id ? 'inline-block' : 'none'; }
   _editingReached = c && c.stageReached ? Object.assign({}, c.stageReached) : {};
@@ -11206,6 +11208,8 @@ const INFO_FIELDS = [
   { key:'parking',  icon:'car',      label:'駐車場',
     inputs:[{id:'f-parking', label:'区画番号', type:'text', ph:'例: P-12'},{id:'f-parkingPrice', label:'駐車場の月額(円・任意)', type:'text', ph:'例: 4400'}],
     value:() => { const p=gv('f-parking'); return p ? ('P' + String(p).replace(/^P[-\s]?/i,'')) : ''; } },
+  { key:'monthly',  icon:'building',  label:'マンスリー', monthly:true,
+    value:() => '' },
 ];
 function gv(id){ const el=document.getElementById(id); return el ? (el.value||'').trim() : ''; }
 function fmtDateVal(v){ return v ? v.slice(5).replace('-','/') : ''; }
@@ -11216,14 +11220,23 @@ function renderInfoIcons(){
   wrap.innerHTML = INFO_FIELDS.map(f => {
     const val = f.value();
     const filled = !!val;
-    const clickAction = f.seg ? 'toggleTypeField()' : 'openInfoEdit(\'' + f.key + '\')';
-    const tip = f.seg ? f.label + ' (クリックで個人⇄法人を切替)' : f.label + ' (クリックで入力)';
+    const clickAction = f.monthly ? 'toggleMonthlyField()' : (f.seg ? 'toggleTypeField()' : 'openInfoEdit(\'' + f.key + '\')');
+    const tip = f.monthly ? 'マンスリー契約かどうか (クリックで切替)' : (f.seg ? f.label + ' (クリックで個人⇄法人を切替)' : f.label + ' (クリックで入力)');
     // 値の表示HTML(物件・仲介は改行、日付は大きく)
     let valBlock;
     let extraClass = '';
     let crossHtml = '';
+    const isMonthlyCard = !!f.monthly;
+    const monthlyOn = isMonthlyCard && (_editingMonthly === true);
     const parkingEmpty = (f.key === 'parking' && !filled);
-    if(parkingEmpty){
+    if(isMonthlyCard){
+      if(monthlyOn){
+        extraClass = ' info-monthly-on';
+        valBlock = '<span class="info-ico-val info-monthly-val">マンスリー契約</span>';
+      } else {
+        valBlock = '<span class="info-ico-val info-monthly-off">マンスリーではない</span>';
+      }
+    } else if(parkingEmpty){
       // 駐車場未入力=不要(赤×)
       extraClass = ' info-red';
       crossHtml = '<span class="info-cross">✕</span>';
@@ -11256,7 +11269,8 @@ function renderInfoIcons(){
     } else {
       valBlock = '<span class="info-ico-val">' + esc(val) + '</span>';
     }
-    return '<div class="info-icon' + (filled ? ' filled' : '') + extraClass + (f.wide ? ' info-icon-wide' : '') + (f.key===_infoEditingKey?' editing':'') + '"' +
+    const cardFilled = isMonthlyCard ? monthlyOn : filled;
+    return '<div class="info-icon' + (cardFilled ? ' filled' : '') + extraClass + (f.wide ? ' info-icon-wide' : '') + (f.key===_infoEditingKey?' editing':'') + '"' +
       ' title="' + tip + '"' +
       ' onclick="' + clickAction + '">' +
       '<div class="info-ico-svg">' + INFO_ICON[f.icon] + crossHtml + '</div>' +
@@ -11264,6 +11278,13 @@ function renderInfoIcons(){
       valBlock +
     '</div>';
   }).join('');
+}
+// マンスリー: クリックでマンスリー契約⇄マンスリーではないを切り替え
+let _editingMonthly = false;
+function toggleMonthlyField(){
+  _editingMonthly = !_editingMonthly;
+  renderInfoIcons();
+  autoSave();
 }
 // 契約者種別: クリックで個人⇄法人を切り替え
 function toggleTypeField(){
@@ -11510,14 +11531,11 @@ function buildContractObject(){
       delete c.itemDates[it.key];
     }
   });
-  // マンスリーチェックの状態を dealStatus に反映
-  const _mchk = document.getElementById('f-monthly');
-  if(_mchk){
-    if(_mchk.checked){
-      if(c.dealStatus !== 'cancel' && c.dealStatus !== 'rejected'){ c.dealStatus = 'monthly'; }
-    } else if(c.dealStatus === 'monthly'){
-      c.dealStatus = 'apply';
-    }
+  // マンスリーカードの状態を dealStatus に反映
+  if(_editingMonthly){
+    if(c.dealStatus !== 'cancel' && c.dealStatus !== 'rejected'){ c.dealStatus = 'monthly'; }
+  } else if(c.dealStatus === 'monthly'){
+    c.dealStatus = 'apply';
   }
   return c;
 }
