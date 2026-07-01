@@ -9227,6 +9227,15 @@ async function makeOwnerPdfBlob(i){
   return new Blob([bytes],{type:"application/pdf"});
 }
 
+// PDFドキュメント全体を丸ごとBlob化(IRE宛プレビュー用・全オーナー分)
+async function makeFullPdfBlob(srcDoc){
+  if(!srcDoc){ return null; }
+  try{
+    const bytes=await srcDoc.save();
+    return new Blob([bytes],{type:"application/pdf"});
+  }catch(e){ console.error("makeFullPdfBlob:", e); return null; }
+}
+
 /* オーナーiのPDFをBase64文字列で取得(GAS送信用) */
 // PDFドキュメント全体を丸ごとBase64化(IRE宛の「全オーナー分」添付用)
 async function makeFullPdfBase64(srcDoc){
@@ -9439,20 +9448,21 @@ async function previewOwnerPdf(i){
   if(box.dataset.open==="1"){ box.innerHTML=""; box.dataset.open="0"; return; }
   box.innerHTML='<div class="pdf-loading">添付PDFを生成中…</div>';
   const d=detail[i];
+  const isIRE=((d.email||"").trim().toLowerCase()==="asano@i-r-e.jp");
   let html="";
   // 月額明細(月額が取り込まれていれば)
   if(pdfDoc && !d.yearOnly){
-    const blob=await makeOwnerPdfBlob(i);
+    const blob = isIRE ? await makeFullPdfBlob(pdfDoc) : await makeOwnerPdfBlob(i);
     if(blob){
       const url=URL.createObjectURL(blob);
-      const pages=[...new Set(d.props.flatMap(p=>p.pages))].length;
-      html+=`<div class="pdf-cap">📎 ${esc(d.owner)}_明細.pdf（${pages}ページ）— このPDFが添付されます</div>
+      const pages = isIRE ? pdfDoc.getPageCount() : [...new Set(d.props.flatMap(p=>p.pages))].length;
+      const capName = isIRE ? `月額明細_全オーナー.pdf（${pages}ページ・全オーナー分）` : `${esc(d.owner)}_明細.pdf（${pages}ページ）`;
+      html+=`<div class="pdf-cap">📎 ${capName} — このPDFが添付されます</div>
         <iframe src="${url}#toolbar=1" title="明細プレビュー"></iframe>`;
     }
   }
-  // 年間収支表(あれば)
   let yb64=null;
-  try{ yb64=await makeYearPdfBase64(d.owner); }catch(e){ html+=`<div class="pdf-cap" style="background:#fdecea;color:#c0392b;">⚠ 年間PDF生成エラー: ${esc(e.message)}</div>`; }
+  try{ yb64 = isIRE ? (yearPdfDoc ? await makeFullPdfBase64(yearPdfDoc) : null) : await makeYearPdfBase64(d.owner); }catch(e){ html+=`<div class="pdf-cap" style="background:#fdecea;color:#c0392b;">⚠ 年間PDF生成エラー: ${esc(e.message)}</div>`; }
   if(yb64){
     try{
       const bin=atob(yb64); const arr=new Uint8Array(bin.length);
