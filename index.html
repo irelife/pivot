@@ -2884,7 +2884,7 @@ function runAutoSwitch(userTriggered){
     }
   });
 
-  const msg = '📢 本日到来した切替対象が ' + targets.length + ' 件あります。\n\n' +
+  const msg = '📢 本日までに到来した切替対象が ' + targets.length + ' 件あります。\n\n' +
               lines.join('\n') + '\n\n' +
               '予約到来分は、前契約者を退去済にして、予約者を使用中に切り替えます。\n今すぐ切替しますか?';
 
@@ -2894,7 +2894,7 @@ function runAutoSwitch(userTriggered){
   }
 
   const count = applyAutoSwitch(targets);
-  showNoticeBar('✅ 本日の自動切替: ' + count + ' 件 (' + lines.join(' / ') + ')');
+  showNoticeBar('✅ 本日までに到来した自動切替: ' + count + ' 件 (' + lines.join(' / ') + ')');
   renderAll();
 }
 
