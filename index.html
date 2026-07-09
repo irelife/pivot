@@ -808,12 +808,12 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #kb-view .ct-ad-label {
     flex: 0 0 auto; font-size: 15px; font-weight: 900; letter-spacing: 1px;
     padding: 3px 12px; border-radius: 999px; line-height: 1.5;
-    color: #5a3a9e; background: #efe8fb; border: 2.5px solid currentColor;
+    color: #0d9488; background: #d6f5f0; border: 2.5px solid currentColor;
     box-shadow: 0 2px 5px rgba(0,0,0,0.10);
   }
   /* ステータス（日付＋プルダウン）を縦に組む */
-  #kb-view .ct-status-box { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 0 0 auto; }
-  #kb-view .ct-status-date { font-size: 20px; font-weight: 900; letter-spacing: 1px; line-height: 1.1; }
+  #kb-view .ct-status-box { display: flex; flex-direction: row; align-items: center; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
+  #kb-view .ct-status-date { font-size: 17px; font-weight: 900; letter-spacing: 1px; line-height: 1.1; white-space: nowrap; }
   /* 駐車場 未紐づけ 警告バッジ */
   #kb-view .ct-notlinked {
     display: inline-block; margin: 6px 0 2px;
@@ -9679,11 +9679,17 @@ const ITEMS = [
   { key:'hinagata',    label:'ひな形送付済み', icon:'hinagata',
     corpOnly:true, got:v => v==='完了', on:'完了', off:'', note:v => v || '' },
   { key:'ad',          label:'AD',           icon:'ad', displayOnly:true,
-    got:v => v!==undefined && v!==null && v!=='' && Number(v) > 0,
+    got:v => { const n = adValue(v); return n > 0; },
     cycle:['0','50','100','150','200','250','300'],
-    color:v => (Number(v) > 0 ? '#5a3a9e' : '#9aa0a6'),
-    note:v => (v===undefined||v===null||v==='') ? 'AD0' : ('AD'+v) },
+    color:v => (adValue(v) > 0 ? '#0d9488' : '#9aa0a6'),
+    note:v => 'AD' + adValue(v) + '%' },
 ];
+// AD値を取り出す。未設定(空/undefined/null)は既定 100 とみなす。明示的な '0' は 0。
+function adValue(v){
+  if(v === undefined || v === null || v === '') return 100;
+  const n = Number(v);
+  return isNaN(n) ? 100 : n;
+}
 function itemGot(c, item){ return item.got(c[item.key]); }
 // 法人専用アイテムか(corpOnly)を、契約種別に応じて表示対象とするか判定
 function itemApplies(c, item){ return item.corpOnly ? ((c && c.type) === '法人') : true; }
@@ -10106,17 +10112,17 @@ function renderCard(c){
       autoOpt +
       menuOpts +
     '</select>';
-  // ステータスを切り替えた日（自動記録）を、ステータスの上に大きめで表示
-  const ddDateHtml = c.dealStatusDate
+  // ステータスを切り替えた日（自動記録）を、「ひな形送付済み」のときだけバッジの横に表示（年なし）
+  const ddDateHtml = (ddStatus === 'hinagata' && c.dealStatusDate)
     ? '<span class="ct-status-date" style="color:' + ddColor + ';">' +
         esc(String(c.dealStatusDate).replace(/^\d{4}-/, '').replace('-', '/')) +
       '</span>'
     : '';
-  const statusBox = '<div class="ct-status-box">' + ddDateHtml + statusSelect + '</div>';
+  const statusBox = '<div class="ct-status-box">' + statusSelect + ddDateHtml + '</div>';
 
-  // 個人/法人の横に出す AD 表示（0も含めて常に表示）
-  const adVal = (c.ad === undefined || c.ad === null || c.ad === '') ? 0 : c.ad;
-  const adLabelHtml = '<span class="ct-ad-label">AD' + esc(String(adVal)) + '</span>';
+  // 個人/法人の横に出す AD 表示（未設定は既定100%。ティール色で目立たせる）
+  const adNum = adValue(c.ad);
+  const adLabelHtml = '<span class="ct-ad-label">AD' + esc(String(adNum)) + '%</span>';
 
   return '<div class="ct-card status-' + status + (isDone ? ' done' : '') + '" data-id="' + c.id + '" draggable="true"' +
     ' style="border-color:' + accent + ';"' +
@@ -10363,13 +10369,13 @@ function showPreview(id){
   const itemsBig = pvItems.map(it => {
     const got = itemGot(c, it);
     const gotDate = (c.itemDates && c.itemDates[it.key]) ? c.itemDates[it.key].slice(5).replace('-','/') : '';
-    // AD は「取得/未取得」ではなく金額を表示
+    // AD は「取得/未取得」ではなく金額(%)を表示
     if(it.key === 'ad'){
-      const adv = (c.ad===undefined||c.ad===null||c.ad==='') ? '0' : String(c.ad);
+      const adn = adValue(c.ad);
       return '<div class="pv-item got">' +
         '<img src="' + ITEM_ICON[it.icon] + '" alt="AD">' +
         '<span class="pv-item-label">AD</span>' +
-        '<span class="pv-item-status">AD' + esc(adv) + '</span>' +
+        '<span class="pv-item-status">AD' + esc(String(adn)) + '%</span>' +
       '</div>';
     }
     return '<div class="pv-item' + (got ? ' got' : '') + '">' +
@@ -10797,11 +10803,11 @@ function renderSheetItemSummary(){
   });
   // 各アイテムのHTMLを生成(タップで取得⇄解除、取得済みは状態色で表示)
   const itemHtml = (it) => {
-    // AD: 取得/未取得ではなく、金額(0〜300)を表示。タップで巡回。
+    // AD: 取得/未取得ではなく、金額(%)を表示。タップで巡回。未設定は既定100%。
     if(it.key === 'ad'){
-      const adv = (tmp.ad===undefined||tmp.ad===null||tmp.ad==='') ? '0' : String(tmp.ad);
-      const adGot = Number(adv) > 0;
-      const adCol = adGot ? '#5a3a9e' : '#9aa0a6';
+      const adn = adValue(tmp.ad);
+      const adGot = adn > 0;
+      const adCol = adGot ? '#0d9488' : '#9aa0a6';
       const adStyle = adGot
         ? ' style="background:' + hexA(adCol,0.16) + ';border-color:' + adCol + ';color:' + adCol + ';"'
         : ' style="background:#fff;border-color:' + adCol + ';color:' + adCol + ';"';
@@ -10809,7 +10815,7 @@ function renderSheetItemSummary(){
         ' onclick="cycleZoneItem(\'ad\')" title="AD(広告料): タップで 0→50→…→300 と切替">' +
         '<div class="dd-iconwrap"><img src="' + ITEM_ICON.ad + '" alt="AD"></div>' +
         '<span class="dd-label">AD</span>' +
-        '<span class="dd-ok" style="color:' + adCol + ';">' + esc(adv) + '</span>' +
+        '<span class="dd-ok" style="color:' + adCol + ';">' + esc(String(adn)) + '%</span>' +
         '<span class="dd-cycle-hint">タップで切替</span>' +
       '</div>';
     }
@@ -10970,8 +10976,8 @@ function cycleZoneItem(key){
   if(!it || !it.cycle) return;
   // AD は 0 も有効値。0/50/…/300 を単純に巡回する（解除には戻さない）
   if(key === 'ad'){
-    const cur = String(_editingItemValues.ad === undefined || _editingItemValues.ad === null ? '0' : _editingItemValues.ad);
-    let idx = it.cycle.indexOf(cur); if(idx < 0) idx = 0;
+    const cur = String(adValue(_editingItemValues.ad));
+    let idx = it.cycle.indexOf(cur); if(idx < 0) idx = it.cycle.indexOf('100');
     const next = it.cycle[(idx + 1) % it.cycle.length];
     _editingItemValues.ad = next;
     if(!_editingItemDates.ad) _editingItemDates.ad = today();
