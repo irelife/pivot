@@ -5682,11 +5682,14 @@ function unlinkReservationFromSpots(info){
 window.PV_unlinkReservation = unlinkReservationFromSpots;
 
 // この契約に紐づく駐車場予約が存在するか(確認ダイアログを無駄に出さないため)
+// 予約(res_)だけでなく「使用中(user)」での紐づけも検出する。
+// 判定は広めに取り、少しでも一致すれば「紐づけ済み」とみなす(未紐づけ警告の誤検知を防ぐ)。
 function hasLinkedReservation(info){
   info = info || {};
   const srcKey = info.srcKey || '';
-  const contractor = String(info.contractor || '').trim();
-  const carName = String(info.carContractor || '').trim();
+  const norm = s => String(s == null ? '' : s).replace(/\s+/g, '').trim();
+  const contractor = norm(info.contractor);
+  const carName = norm(info.carContractor);
   if(!srcKey && !contractor && !carName) return false;
   const all = loadAll();
   let found = false;
@@ -5694,11 +5697,14 @@ function hasLinkedReservation(info){
     if(found || !b || !Array.isArray(b.spots)) return;
     b.spots.forEach(s => {
       if(found || !s) return;
-      const hasRes = !!(s.res_user || s.res_date || s.res_srcKey);
-      if(!hasRes) return;
-      const bySrc  = !!(srcKey && s.res_srcKey && s.res_srcKey === srcKey);
-      const byName = !!(s.res_user && ((contractor && s.res_user === contractor) || (carName && s.res_user === carName)));
-      if(bySrc || byName) found = true;
+      // srcKey 一致(予約・使用中どちらでも res_srcKey は残る)
+      if(srcKey && s.res_srcKey && s.res_srcKey === srcKey){ found = true; return; }
+      // 予約者名 一致
+      const ru = norm(s.res_user);
+      if(ru && ((contractor && ru === contractor) || (carName && ru === carName))){ found = true; return; }
+      // 使用中の使用者名 一致(過去日で「使用中」登録された場合)
+      const su = norm(s.user);
+      if(su && ((contractor && su === contractor) || (carName && su === carName))){ found = true; return; }
     });
   });
   return found;
@@ -10118,7 +10124,7 @@ function renderCard(c){
         esc(String(c.dealStatusDate).replace(/^\d{4}-/, '').replace('-', '/')) +
       '</span>'
     : '';
-  const statusBox = '<div class="ct-status-box">' + statusSelect + ddDateHtml + '</div>';
+  const statusBox = '<div class="ct-status-box">' + ddDateHtml + statusSelect + '</div>';
 
   // 個人/法人の横に出す AD 表示（未設定は既定100%。ティール色で目立たせる）
   const adNum = adValue(c.ad);
