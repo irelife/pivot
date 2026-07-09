@@ -816,6 +816,8 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #kb-view .ct-status-date { font-size: 16px; font-weight: 900; letter-spacing: 1px; line-height: 1.1; white-space: nowrap; display: inline-flex; align-items: baseline; gap: 4px; }
   #kb-view .ct-status-date-label { font-size: 12px; font-weight: 700; letter-spacing: 0; opacity: 0.85; }
   #kb-view .ct-status-date-arrow { font-size: 12px; font-weight: 700; opacity: 0.6; }
+  #kb-view .ct-status-date-edit { font-size: 11px; opacity: 0.5; margin-left: 3px; }
+  #kb-view .ct-status-date:hover .ct-status-date-edit { opacity: 0.9; }
   #kb-view .ct-pet-dog { width: 30px; height: 30px; vertical-align: middle; margin-left: 8px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2)); }
   #kb-view .ct-pet-label { font-size: 12px; font-weight: 700; color: #8a5a2b; vertical-align: middle; margin-left: 3px; }
   /* 駐車場 未紐づけ 警告バッジ */
@@ -10151,10 +10153,11 @@ function renderCard(c){
   // ステータスを切り替えた日（自動記録）を、「ひな形送付済み」のときだけバッジの横に表示（年なし）
   // ステータスを切り替えた日を、どのステータスでもバッジの上に表示（年なし）
   const ddDateHtml = c.dealStatusDate
-    ? '<span class="ct-status-date" style="color:' + ddColor + ';">' +
+    ? '<span class="ct-status-date" style="color:' + ddColor + ';cursor:pointer;" title="タップで日付だけ変更" onclick="event.stopPropagation();KB.promptStatusDate(\'' + c.id + '\')">' +
         '<span class="ct-status-date-label">' + esc(ddLabel) + '</span>' +
         '<span class="ct-status-date-arrow">→</span>' +
         esc(String(c.dealStatusDate).replace(/^\d{4}-/, '').replace('-', '/')) +
+        '<span class="ct-status-date-edit">✎</span>' +
       '</span>'
     : '';
   const statusBox = '<div class="ct-status-box">' + ddDateHtml + statusSelect + '</div>';
@@ -10386,7 +10389,7 @@ function promptStatusDate(id){
       '<div style="font-size:12px;color:#888;margin-bottom:14px;">その日でなければカレンダーで直してください（既定は今日）</div>' +
       '<input type="date" id="status-date-input" value="' + esc(cur) + '" style="width:100%;font-size:17px;padding:10px;border:1.5px solid #cbd5e0;border-radius:8px;box-sizing:border-box;margin-bottom:16px;">' +
       '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
-        '<button id="status-date-cancel" style="padding:9px 16px;border:1.5px solid #cbd5e0;background:#fff;border-radius:8px;font-weight:700;cursor:pointer;">今日のまま</button>' +
+        '<button id="status-date-cancel" style="padding:9px 16px;border:1.5px solid #cbd5e0;background:#fff;border-radius:8px;font-weight:700;cursor:pointer;">キャンセル</button>' +
         '<button id="status-date-ok" style="padding:9px 18px;border:none;background:#4a5fd0;color:#fff;border-radius:8px;font-weight:800;cursor:pointer;">決定</button>' +
       '</div>' +
     '</div>';
@@ -12033,6 +12036,7 @@ try{window.KB.moveGhost=moveGhost;}catch(e){}
 try{window.KB.moveToDone=moveToDone;}catch(e){}
 try{window.KB.revertToApply=revertToApply;}catch(e){}
 try{window.KB.onCardStatusChange=onCardStatusChange;}catch(e){}
+try{window.KB.promptStatusDate=promptStatusDate;}catch(e){}
 try{window.KB.onMonthlyToggle=onMonthlyToggle;}catch(e){}
 try{window.KB.onCardClick=onCardClick;}catch(e){}
 try{window.KB.onCardDragEnd=onCardDragEnd;}catch(e){}
