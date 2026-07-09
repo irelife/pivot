@@ -814,6 +814,18 @@ body.tab-kanban .kb-toolbar { display:flex; }
   /* ステータス（日付＋プルダウン）を縦に組む */
   #kb-view .ct-status-box { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 0 0 auto; }
   #kb-view .ct-status-date { font-size: 20px; font-weight: 900; letter-spacing: 1px; line-height: 1.1; }
+  /* 駐車場 未紐づけ 警告バッジ */
+  #kb-view .ct-notlinked {
+    display: inline-block; margin: 6px 0 2px;
+    background: #ffe3e0; color: #c0271c; border: 2px solid #e53a2c;
+    font-size: 13px; font-weight: 900; letter-spacing: .5px;
+    padding: 4px 12px; border-radius: 8px;
+    animation: kb-notlinked-blink 1.3s ease-in-out infinite;
+  }
+  @keyframes kb-notlinked-blink {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(229,58,44,0.0); }
+    50%      { opacity: .78; box-shadow: 0 0 0 4px rgba(229,58,44,0.16); }
+  }
   #kb-view .ct-type-label {
     flex: 0 0 auto; font-size: 16px; font-weight: 900; letter-spacing: 2px;
     padding: 3px 14px; border-radius: 999px; line-height: 1.5;
@@ -10031,6 +10043,20 @@ function renderCard(c){
   if(roomNo) titleLine += '<span class="t-room">' + esc(roomNo) + '号</span>';
   if(pkg) titleLine += '<span class="t-park">P' + esc(pkg.replace(/^P[-\s]?/i,'')) + '</span>';
 
+  // 駐車場(P区画)があるのに、まだ物件管理の区画へ紐づけていない場合は警告する
+  // (キャンセル・審査落ち・完了移動済みは対象外)
+  let notLinked = false;
+  if(pkg && !c.archived && status !== 'cancel'){
+    try{
+      const info = { contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking };
+      const linked = (typeof window.PV_hasReservation === 'function') ? window.PV_hasReservation(info) : true;
+      notLinked = !linked;
+    }catch(e){ notLinked = false; }
+  }
+  const notLinkedBadge = notLinked
+    ? '<div class="ct-notlinked" title="この契約は駐車場区画にまだ紐づけられていません。カードを開いて「🅿 紐づけ」を押してください。">⚠ 駐車場 未紐づけ</div>'
+    : '';
+
   const curName = (curIdx < 0) ? '未着手' : cur.name;
   const statusLabel = isDone ? '✓ 完了' : (status==='defect' ? '基本情報不備あり' : (status==='almost' ? 'もうすぐ完了' : '進行中'));
 
@@ -10109,6 +10135,7 @@ function renderCard(c){
       '</div>' +
       '<div class="ct-body">' +
         '<div class="card-title">' + titleLine + '</div>' +
+        notLinkedBadge +
         (isMonthly(c) ? '<div class="ct-monthly-badge">マンスリー</div>' : '') +
         '<div class="card-sub">' +
           '<span class="card-name">' + esc(c.contractor || '(契約者未入力)') + '</span>' +
