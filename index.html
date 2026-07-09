@@ -814,7 +814,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
   /* ステータス（日付＋プルダウン）を縦に組む */
   #kb-view .ct-status-box { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 0 0 auto; }
   #kb-view .ct-status-date { font-size: 16px; font-weight: 900; letter-spacing: 1px; line-height: 1.1; white-space: nowrap; }
-  #kb-view .ct-pet-dog { width: 22px; height: 22px; vertical-align: middle; margin-left: 7px; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.15)); }
+  #kb-view .ct-pet-dog { width: 30px; height: 30px; vertical-align: middle; margin-left: 8px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2)); }
   /* 駐車場 未紐づけ 警告バッジ */
   #kb-view .ct-notlinked {
     display: inline-block; margin: 6px 0 2px;
@@ -9598,6 +9598,32 @@ const ICON_DOG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   '<path d="M12 13.2v1.4M10.6 15.4c.4.4 2.4.4 2.8 0"/>' +
   '</svg>'
 );
+// カード一覧用の大きめカラー犬アイコン(柴犬風)
+const ICON_DOG_COLOR = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">' +
+  // 耳(垂れ耳・濃い茶)
+  '<path d="M9 10 Q6 17 10 25 L17 20 Q12 14 14 9 Z" fill="#b5651d"/>' +
+  '<path d="M39 10 Q42 17 38 25 L31 20 Q36 14 34 9 Z" fill="#b5651d"/>' +
+  // 顔(明るい茶)
+  '<path d="M24 12 C33 12 38 19 38 27 C38 36 31 41 24 41 C17 41 10 36 10 27 C10 19 15 12 24 12 Z" fill="#e8a05a"/>' +
+  // 口まわり(白)
+  '<ellipse cx="24" cy="31" rx="9" ry="7.5" fill="#fff6ec"/>' +
+  // ほお(白)
+  '<circle cx="14.5" cy="27" r="4" fill="#fff6ec"/>' +
+  '<circle cx="33.5" cy="27" r="4" fill="#fff6ec"/>' +
+  // 目
+  '<circle cx="18.5" cy="24" r="2.2" fill="#3a2a1a"/>' +
+  '<circle cx="29.5" cy="24" r="2.2" fill="#3a2a1a"/>' +
+  '<circle cx="19.2" cy="23.3" r="0.7" fill="#fff"/>' +
+  '<circle cx="30.2" cy="23.3" r="0.7" fill="#fff"/>' +
+  // 鼻
+  '<ellipse cx="24" cy="29.5" rx="2.6" ry="2" fill="#2a1a10"/>' +
+  // 口
+  '<path d="M24 31.5 Q24 34 21 34.5 M24 31.5 Q24 34 27 34.5" stroke="#5a3a20" stroke-width="1.4" fill="none" stroke-linecap="round"/>' +
+  // 舌
+  '<path d="M23 34.5 Q24 37.5 25 34.5 Z" fill="#f288b9"/>' +
+  '</svg>'
+);
 // 車(正面/横)
 const ICON_PARK = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3a3a3c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
@@ -10120,7 +10146,8 @@ function renderCard(c){
       menuOpts +
     '</select>';
   // ステータスを切り替えた日（自動記録）を、「ひな形送付済み」のときだけバッジの横に表示（年なし）
-  const ddDateHtml = (ddStatus === 'hinagata' && c.dealStatusDate)
+  // ステータスを切り替えた日を、どのステータスでもバッジの上に表示（年なし）
+  const ddDateHtml = c.dealStatusDate
     ? '<span class="ct-status-date" style="color:' + ddColor + ';">' +
         esc(String(c.dealStatusDate).replace(/^\d{4}-/, '').replace('-', '/')) +
       '</span>'
@@ -10152,7 +10179,7 @@ function renderCard(c){
         (isMonthly(c) ? '<div class="ct-monthly-badge">マンスリー</div>' : '') +
         '<div class="card-sub">' +
           '<span class="card-name">' + esc(c.contractor || '(契約者未入力)') + '</span>' +
-          ((c.pet === 'あり') ? '<img class="ct-pet-dog" src="' + ICON_DOG + '" title="ペット飼育あり" alt="ペットあり">' : '') +
+          ((c.pet === 'あり') ? '<img class="ct-pet-dog" src="' + ICON_DOG_COLOR + '" title="ペット飼育あり" alt="ペットあり">' : '') +
         '</div>' +
         cdateHtml(c) +
         '<div class="ct-progress"><div class="prog-bar">' + segHtml + '</div>' +
@@ -10271,8 +10298,9 @@ function onCardStatusChange(event, id){
   const all = loadAll();
   const c = all[id];
   if(!c){ return; }
-  // ★ ステータスが変わったら、その切り替え日を自動記録（カード右上に表示する）
-  if(val && c.dealStatus !== val){
+  const statusChanged = (val && c.dealStatus !== val);
+  // ★ ステータスが変わったら、その切り替え日を記録（初期値は今日、後でカレンダーで修正可）
+  if(statusChanged){
     const _t = new Date();
     c.dealStatusDate = _t.getFullYear() + '-' + String(_t.getMonth()+1).padStart(2,'0') + '-' + String(_t.getDate()).padStart(2,'0');
   }
@@ -10324,6 +10352,53 @@ function onCardStatusChange(event, id){
     }catch(e){}
     if(wasCancel){ maybeRestoreReservation(c); }
   }
+  // ★ ステータスが変わったら、日付を確認・修正できるカレンダーを出す
+  if(statusChanged && val !== 'cancel' && val !== 'rejected'){
+    promptStatusDate(id);
+  }
+}
+
+// ステータス切替日をカレンダーで選ばせる小さなダイアログ
+function promptStatusDate(id){
+  const all = loadAll();
+  const c = all[id];
+  if(!c) return;
+  const cur = c.dealStatusDate || (function(){ const t=new Date(); return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); })();
+  // 既存のダイアログがあれば消す
+  const old = document.getElementById('status-date-dialog');
+  if(old) old.remove();
+  const statusLabel = (function(){
+    const def = (typeof dealStatusDef === 'function') ? dealStatusDef(c.dealStatus) : null;
+    if(c.dealStatus === 'hinagata') return 'ひな形送付済み';
+    return def ? def.label : (c.dealStatus || '');
+  })();
+  const ov = document.createElement('div');
+  ov.id = 'status-date-dialog';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:99999;display:flex;align-items:center;justify-content:center;';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:14px;padding:22px 20px;max-width:320px;width:88%;box-shadow:0 10px 40px rgba(0,0,0,0.3);">' +
+      '<div style="font-weight:800;font-size:15px;color:#333;margin-bottom:4px;">「' + esc(statusLabel) + '」にした日</div>' +
+      '<div style="font-size:12px;color:#888;margin-bottom:14px;">その日でなければカレンダーで直してください（既定は今日）</div>' +
+      '<input type="date" id="status-date-input" value="' + esc(cur) + '" style="width:100%;font-size:17px;padding:10px;border:1.5px solid #cbd5e0;border-radius:8px;box-sizing:border-box;margin-bottom:16px;">' +
+      '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+        '<button id="status-date-cancel" style="padding:9px 16px;border:1.5px solid #cbd5e0;background:#fff;border-radius:8px;font-weight:700;cursor:pointer;">今日のまま</button>' +
+        '<button id="status-date-ok" style="padding:9px 18px;border:none;background:#4a5fd0;color:#fff;border-radius:8px;font-weight:800;cursor:pointer;">決定</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
+  const input = document.getElementById('status-date-input');
+  const close = () => { const d=document.getElementById('status-date-dialog'); if(d) d.remove(); };
+  document.getElementById('status-date-cancel').onclick = () => { close(); };
+  document.getElementById('status-date-ok').onclick = () => {
+    const v = input.value;
+    if(v){
+      const a2 = loadAll(); const c2 = a2[id];
+      if(c2){ c2.dealStatusDate = v; saveAll(a2); renderAll(); }
+    }
+    close();
+  };
+  ov.onclick = (e) => { if(e.target === ov) close(); };
+  setTimeout(() => { try{ input.focus(); }catch(e){} }, 50);
 }
 function iconForStep(key){
   const m = {applyDate:'apply', contractDate:'cdate', sendDate:'send', returnDate:'return', paymentDate:'pay', keyHandover:'key', doneStage:'done'};
