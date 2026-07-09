@@ -802,7 +802,18 @@ body.tab-kanban .kb-toolbar { display:flex; }
     padding: 16px 20px 18px; cursor: pointer;
     transition: transform 0.12s, box-shadow 0.12s;
   }
-  #kb-view .ct-head { display: flex; justify-content: space-between; align-items: center; min-height: 34px; gap: 8px; margin-bottom: 8px; }
+  #kb-view .ct-head { display: flex; justify-content: space-between; align-items: flex-start; min-height: 34px; gap: 8px; margin-bottom: 8px; }
+  #kb-view .ct-head-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  /* 個人/法人の横に出す AD 表示 */
+  #kb-view .ct-ad-label {
+    flex: 0 0 auto; font-size: 15px; font-weight: 900; letter-spacing: 1px;
+    padding: 3px 12px; border-radius: 999px; line-height: 1.5;
+    color: #5a3a9e; background: #efe8fb; border: 2.5px solid currentColor;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.10);
+  }
+  /* ステータス（日付＋プルダウン）を縦に組む */
+  #kb-view .ct-status-box { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 0 0 auto; }
+  #kb-view .ct-status-date { font-size: 20px; font-weight: 900; letter-spacing: 1px; line-height: 1.1; }
   #kb-view .ct-type-label {
     flex: 0 0 auto; font-size: 16px; font-weight: 900; letter-spacing: 2px;
     padding: 3px 14px; border-radius: 999px; line-height: 1.5;
@@ -9611,6 +9622,8 @@ const ITEM_ICON = {
   guarantee: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3a3a3c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="5.5"/><path d="M6.5 10h11M12 4.5v11" stroke-width="2"/><rect x="4" y="18" width="16" height="2.2" rx="1" fill="#3a3a3c" stroke="none"/></svg>'),
   // ひな形送付済み(法人): 書類+送信
   hinagata: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3a3a3c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h7l4 4v6.5"/><path d="M12 3v4h4"/><path d="M5 3v18h7"/><path d="M8 8.5h3M8 12h3M8 15.5h2"/><path d="M21 17l-6 2.2L17 14z"/><path d="M21 17l-4.5 1.6"/></svg>'),
+  // AD(広告料): 円マーク付きの札
+  ad: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3a3a3c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M12 9v6M9.6 10.8h4.8M9.6 13.2h4.8" stroke-width="1.5"/><circle cx="5.5" cy="12" r="0.6" fill="#3a3a3c" stroke="none"/><circle cx="18.5" cy="12" r="0.6" fill="#3a3a3c" stroke="none"/></svg>'),
 };
 
 // アイテム定義(キー, ラベル, 取得判定関数, クリック時のON/OFF値)
@@ -9653,12 +9666,19 @@ const ITEMS = [
     got:v => v==='完了', on:'完了', off:'', note:v => v || '' },
   { key:'hinagata',    label:'ひな形送付済み', icon:'hinagata',
     corpOnly:true, got:v => v==='完了', on:'完了', off:'', note:v => v || '' },
+  { key:'ad',          label:'AD',           icon:'ad', displayOnly:true,
+    got:v => v!==undefined && v!==null && v!=='' && Number(v) > 0,
+    cycle:['0','50','100','150','200','250','300'],
+    color:v => (Number(v) > 0 ? '#5a3a9e' : '#9aa0a6'),
+    note:v => (v===undefined||v===null||v==='') ? 'AD0' : ('AD'+v) },
 ];
 function itemGot(c, item){ return item.got(c[item.key]); }
 // 法人専用アイテムか(corpOnly)を、契約種別に応じて表示対象とするか判定
 function itemApplies(c, item){ return item.corpOnly ? ((c && c.type) === '法人') : true; }
-// 種別に応じて表示・集計対象になるアイテム一覧
-function applicableItems(c){ return ITEMS.filter(it => itemApplies(c, it)); }
+// 達成数・完了判定に使うアイテム(displayOnly=表示専用アイテムは除外)
+function applicableItems(c){ return ITEMS.filter(it => itemApplies(c, it) && !it.displayOnly); }
+// 詳細画面のアイテム描画に使う一覧(displayOnlyも含む)
+function displayItems(c){ return ITEMS.filter(it => itemApplies(c, it)); }
 // 日付記録項目(同じ仕様: クリックで色と日付)
 const DATE_ITEMS = [
   { key:'esignDate',     label:'電子署名',   icon:'esign' },
@@ -10060,14 +10080,28 @@ function renderCard(c){
       autoOpt +
       menuOpts +
     '</select>';
+  // ステータスを切り替えた日（自動記録）を、ステータスの上に大きめで表示
+  const ddDateHtml = c.dealStatusDate
+    ? '<span class="ct-status-date" style="color:' + ddColor + ';">' +
+        esc(String(c.dealStatusDate).replace(/^\d{4}-/, '').replace('-', '/')) +
+      '</span>'
+    : '';
+  const statusBox = '<div class="ct-status-box">' + ddDateHtml + statusSelect + '</div>';
+
+  // 個人/法人の横に出す AD 表示（0も含めて常に表示）
+  const adVal = (c.ad === undefined || c.ad === null || c.ad === '') ? 0 : c.ad;
+  const adLabelHtml = '<span class="ct-ad-label">AD' + esc(String(adVal)) + '</span>';
 
   return '<div class="ct-card status-' + status + (isDone ? ' done' : '') + '" data-id="' + c.id + '" draggable="true"' +
     ' style="border-color:' + accent + ';"' +
     ' onclick="KB.onCardClick(event,\'' + c.id + '\')">' +
     '<button class="ct-card-del" title="この契約を削除" onclick="event.stopPropagation();KB.deleteCardContract(event,\'' + c.id + '\')">×</button>' +
     '<div class="ct-head">' +
-      '<span class="ct-type-label ct-type-' + ((c.type === '法人') ? 'corp' : 'indiv') + '">' + ((c.type === '法人') ? '法人' : '個人') + '</span>' +
-      statusSelect +
+      '<span class="ct-head-left">' +
+        '<span class="ct-type-label ct-type-' + ((c.type === '法人') ? 'corp' : 'indiv') + '">' + ((c.type === '法人') ? '法人' : '個人') + '</span>' +
+        adLabelHtml +
+      '</span>' +
+      statusBox +
     '</div>' +
     '<div class="ct-main">' +
       '<div class="ct-badge" style="background:' + accent + ';">' +
@@ -10196,6 +10230,11 @@ function onCardStatusChange(event, id){
   const all = loadAll();
   const c = all[id];
   if(!c){ return; }
+  // ★ ステータスが変わったら、その切り替え日を自動記録（カード右上に表示する）
+  if(val && c.dealStatus !== val){
+    const _t = new Date();
+    c.dealStatusDate = _t.getFullYear() + '-' + String(_t.getMonth()+1).padStart(2,'0') + '-' + String(_t.getDate()).padStart(2,'0');
+  }
   if(val === 'cancel' || val === 'rejected'){
     const lbl = (val === 'cancel') ? 'キャンセル' : '審査落ち';
     const info = { contractor: c.contractor, carContractor: c.carContractor, srcKey: c.id, property: c.property, parking: c.parking };
@@ -10292,11 +10331,20 @@ function showPreview(id){
     (c.contractDate ? '<span class="pv-tag">契約日 ' + esc(c.contractDate.slice(5).replace('-','/')) + '</span>' : '');
 
   // 獲得アイテム(大きく表示)
-  const pvItems = applicableItems(c);
-  const gotCount = pvItems.filter(it => itemGot(c, it)).length;
+  const pvItems = displayItems(c);                         // AD等の表示専用も出す
+  const gotCount = applicableItems(c).filter(it => itemGot(c, it)).length;  // 取得数は達成項目のみ
   const itemsBig = pvItems.map(it => {
     const got = itemGot(c, it);
     const gotDate = (c.itemDates && c.itemDates[it.key]) ? c.itemDates[it.key].slice(5).replace('-','/') : '';
+    // AD は「取得/未取得」ではなく金額を表示
+    if(it.key === 'ad'){
+      const adv = (c.ad===undefined||c.ad===null||c.ad==='') ? '0' : String(c.ad);
+      return '<div class="pv-item got">' +
+        '<img src="' + ITEM_ICON[it.icon] + '" alt="AD">' +
+        '<span class="pv-item-label">AD</span>' +
+        '<span class="pv-item-status">AD' + esc(adv) + '</span>' +
+      '</div>';
+    }
     return '<div class="pv-item' + (got ? ' got' : '') + '">' +
       '<img src="' + ITEM_ICON[it.icon] + '" alt="' + it.label + '">' +
       '<span class="pv-item-label">' + it.label + '</span>' +
@@ -10710,10 +10758,10 @@ function renderSheetItemSummary(){
   tmp.type = _editingType;          // 法人専用アイテムの表示判定に使う
   // 内部にもP区画値を反映
   _editingItemValues.parking = tmp.parking;
-  const shownItems = applicableItems(tmp);   // 個人ならひな形を除外
-  const gotCount = shownItems.filter(it => itemGot(tmp, it)).length;
+  const shownItems = displayItems(tmp);              // AD等の表示専用も出す
+  const gotCount = applicableItems(tmp).filter(it => itemGot(tmp, it)).length;  // 取得数は達成項目のみ
   // フォーム値と取得日を同期(手入力で変えた場合も反映)
-  shownItems.forEach(it => {
+  applicableItems(tmp).forEach(it => {
     if(itemGot(tmp, it)){
       if(!_editingItemDates[it.key]) _editingItemDates[it.key] = today();
     } else {
@@ -10722,6 +10770,22 @@ function renderSheetItemSummary(){
   });
   // 各アイテムのHTMLを生成(タップで取得⇄解除、取得済みは状態色で表示)
   const itemHtml = (it) => {
+    // AD: 取得/未取得ではなく、金額(0〜300)を表示。タップで巡回。
+    if(it.key === 'ad'){
+      const adv = (tmp.ad===undefined||tmp.ad===null||tmp.ad==='') ? '0' : String(tmp.ad);
+      const adGot = Number(adv) > 0;
+      const adCol = adGot ? '#5a3a9e' : '#9aa0a6';
+      const adStyle = adGot
+        ? ' style="background:' + hexA(adCol,0.16) + ';border-color:' + adCol + ';color:' + adCol + ';"'
+        : ' style="background:#fff;border-color:' + adCol + ';color:' + adCol + ';"';
+      return '<div class="dd-item zone-fill' + (adGot?'':' zone-outline') + '"' + adStyle +
+        ' onclick="cycleZoneItem(\'ad\')" title="AD(広告料): タップで 0→50→…→300 と切替">' +
+        '<div class="dd-iconwrap"><img src="' + ITEM_ICON.ad + '" alt="AD"></div>' +
+        '<span class="dd-label">AD</span>' +
+        '<span class="dd-ok" style="color:' + adCol + ';">' + esc(adv) + '</span>' +
+        '<span class="dd-cycle-hint">タップで切替</span>' +
+      '</div>';
+    }
     const isParking = (it.key === 'parking');
     const isPet = (it.key === 'pet');
     let got = itemGot(tmp, it);
@@ -10797,7 +10861,7 @@ function renderSheetItemSummary(){
     '</div>';
   };
   elc.innerHTML =
-    '<div class="sis-count">' + gotCount + ' / ' + shownItems.length + ' 取得 ' +
+    '<div class="sis-count">' + gotCount + ' / ' + applicableItems(tmp).length + ' 取得 ' +
       '<span style="font-weight:500;color:#999;">(アイコンをタップで取得 / もう一度タップで解除)</span></div>' +
     '<div class="dd-grid">' +
       shownItems.map(it => itemHtml(it)).join('') +
@@ -10877,6 +10941,17 @@ function setItemDate(key, val){
 function cycleZoneItem(key){
   const it = ITEMS.find(x => x.key === key);
   if(!it || !it.cycle) return;
+  // AD は 0 も有効値。0/50/…/300 を単純に巡回する（解除には戻さない）
+  if(key === 'ad'){
+    const cur = String(_editingItemValues.ad === undefined || _editingItemValues.ad === null ? '0' : _editingItemValues.ad);
+    let idx = it.cycle.indexOf(cur); if(idx < 0) idx = 0;
+    const next = it.cycle[(idx + 1) % it.cycle.length];
+    _editingItemValues.ad = next;
+    if(!_editingItemDates.ad) _editingItemDates.ad = today();
+    renderSheetItemSummary();
+    autoSave();
+    return;
+  }
   const cur = _editingItemValues[key] || '';
   // 取得状態の値 + 末尾に「解除('')」を加えて巡回
   const gotVals = it.cycle.filter(x => it.got(x));
