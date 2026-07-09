@@ -812,8 +812,9 @@ body.tab-kanban .kb-toolbar { display:flex; }
     box-shadow: 0 2px 5px rgba(0,0,0,0.10);
   }
   /* ステータス（日付＋プルダウン）を縦に組む */
-  #kb-view .ct-status-box { display: flex; flex-direction: row; align-items: center; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
-  #kb-view .ct-status-date { font-size: 17px; font-weight: 900; letter-spacing: 1px; line-height: 1.1; white-space: nowrap; }
+  #kb-view .ct-status-box { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 0 0 auto; }
+  #kb-view .ct-status-date { font-size: 16px; font-weight: 900; letter-spacing: 1px; line-height: 1.1; white-space: nowrap; }
+  #kb-view .ct-pet-dog { width: 22px; height: 22px; vertical-align: middle; margin-left: 7px; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.15)); }
   /* 駐車場 未紐づけ 警告バッジ */
   #kb-view .ct-notlinked {
     display: inline-block; margin: 6px 0 2px;
@@ -10151,6 +10152,7 @@ function renderCard(c){
         (isMonthly(c) ? '<div class="ct-monthly-badge">マンスリー</div>' : '') +
         '<div class="card-sub">' +
           '<span class="card-name">' + esc(c.contractor || '(契約者未入力)') + '</span>' +
+          ((c.pet === 'あり') ? '<img class="ct-pet-dog" src="' + ICON_DOG + '" title="ペット飼育あり" alt="ペットあり">' : '') +
         '</div>' +
         cdateHtml(c) +
         '<div class="ct-progress"><div class="prog-bar">' + segHtml + '</div>' +
