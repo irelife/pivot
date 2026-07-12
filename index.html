@@ -1666,7 +1666,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #rent-view .btn-sm{font-size:.78rem;padding:6px 11px;}
   #rent-view .btn-warn{color:var(--rt-warn);border-color:var(--rt-warn-soft);background:var(--rt-warn-soft);}
 
-  #rent-view table.owners{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--rt-line);border-radius:12px;overflow:hidden;font-size:.83rem;}
+  #rent-view table.owners{width:100%;min-width:680px;border-collapse:collapse;background:#fff;border:1px solid var(--rt-line);border-radius:12px;overflow:hidden;font-size:.83rem;}
   #rent-view table.owners th, #rent-view table.owners td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--rt-line);vertical-align:top;}
   #rent-view table.owners th{background:#ebe7dc;font-size:.74rem;color:var(--rt-muted);font-weight:800;white-space:nowrap;}
   #rent-view table.owners input{font-family:inherit;font-size:.82rem;border:1px solid transparent;background:transparent;border-radius:5px;padding:5px 6px;width:100%;}
@@ -8683,7 +8683,7 @@ function norm(s){ return (s||"").replace(/[\s\u3000]/g,"").replace(/御中|様/g
 function renderOwners(){
   const t=document.getElementById("ownerTable");
   let rows=owners.map((o,i)=>`<tr${o.exclude?' style="background:#f3f0ee;opacity:.7;"':''}>
-    <td style="width:16%"><input value="${esc(o.name)}" oninput="RENT.editOwner(${i},'name',this.value)" placeholder="オーナー名"></td>
+    <td style="width:20%;min-width:150px;"><input value="${esc(o.name)}" oninput="RENT.editOwner(${i},'name',this.value)" placeholder="オーナー名"></td>
     <td style="width:28%"><textarea rows="${Math.min(8,Math.max(1,(o.properties&&o.properties.length)||1))}" oninput="RENT.editProps(${i},this.value)" placeholder="物件名（複数は改行で）" style="font-family:inherit;font-size:.8rem;border:1px solid transparent;background:transparent;border-radius:5px;padding:5px 6px;width:100%;resize:vertical;line-height:1.5;">${esc((o.properties&&o.properties.length?o.properties:[o.property||'']).join('\n'))}</textarea>${(o.properties&&o.properties.length>1)?`<div style="font-size:.66rem;color:var(--gold);font-weight:800;margin-top:2px;">${o.properties.length}物件</div>`:''}</td>
     <td style="width:20%"><input value="${esc(o.atena)}" oninput="RENT.editOwner(${i},'atena',this.value)" placeholder="宛名（〇〇 御中）"></td>
     <td style="width:24%"><input value="${esc(o.email)}" oninput="RENT.editOwner(${i},'email',this.value)" placeholder="メールアドレス"></td>
@@ -9234,6 +9234,7 @@ function renderPreview(){
         ${_statusBadge}
         ${vacPill}
         ${mailPill}
+        <button onclick="event.stopPropagation();RENT.removeFromList(${i})" title="この一覧から外す" style="flex-shrink:0;margin-left:8px;width:26px;height:26px;border:1px solid #d9c9a8;background:#fff;color:#a14a3a;border-radius:6px;font-weight:800;cursor:pointer;line-height:1;">✕</button>
       </div>
       <div class="pv-body" id="pvb-${i}">
         <div class="pv-meta">${d.yearOnly
