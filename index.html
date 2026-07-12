@@ -1978,6 +1978,11 @@ body.tab-kanban .kb-toolbar { display:flex; }
     </div>
     <div id="rent-exclude-note" style="display:none;font-size:.8rem;color:var(--rt-muted);background:#f3f0ee;border-radius:8px;padding:8px 12px;margin-bottom:10px;"></div>
     <div class="preview" id="preview"><div class="empty">明細PDFを取り込むと、オーナーごとの送信内容がここに表示されます。</div></div>
+    <div id="rent-excluded-section" style="display:none;margin-top:18px;border:2px dashed #c8a96b;border-radius:10px;padding:12px 14px;background:#fdfaf3;">
+      <div style="font-weight:800;color:#8a6d2f;font-size:.92rem;margin-bottom:4px;">🔒 メール送信しないオーナー（別管理）</div>
+      <div style="font-size:.78rem;color:var(--rt-muted);margin-bottom:10px;">「除外」に指定したオーナーです。メールは送らず、明細PDFをこちらから書き出して保存できます。</div>
+      <div id="excludedPreview"></div>
+    </div>
   </div>
 
   <!-- ===== オーナー一覧ビュー ===== -->
@@ -9179,9 +9184,10 @@ function renderPreview(){
   // 「送信しない」に指定されたオーナー名のセット(除外)
   const excludeSet=new Set(owners.filter(o=>o.exclude).map(o=>norm(o.name)));
   let shown=0, excludedCount=0;
+  const excludedIdx=[];
   const cards=detail.map((d,i)=>{
-    // 除外オーナーはプレビューに出さない
-    if(excludeSet.has(norm(d.owner))){ excludedCount++; return ""; }
+    // 除外オーナーは送信欄に出さず、専用区画へ回す
+    if(excludeSet.has(norm(d.owner))){ excludedCount++; excludedIdx.push(i); return ""; }
     if(q){
       const hay=(d.owner+" "+d.atena+" "+d.props.map(p=>p.property||p.bldNo).join(" ")).replace(/[\s\u3000]/g,"").toLowerCase();
       if(!hay.includes(q)) return "";
@@ -9244,10 +9250,54 @@ function renderPreview(){
     </div>`;
   }).join("");
   box.innerHTML = shown ? cards : '<div class="empty">'+(q?('「'+esc(sb)+'」に一致するオーナー・物件は見つかりませんでした。'):'表示できるオーナーがありません。')+'</div>';
+  // 除外オーナー専用区画(別管理)
+  const exSec=document.getElementById("rent-excluded-section");
+  const exBox=document.getElementById("excludedPreview");
+  if(exSec && exBox){
+    if(excludedIdx.length){
+      exSec.style.display="block";
+      exBox.innerHTML=excludedIdx.map(i=>{
+        const d=detail[i];
+        const pageList=d.props.flatMap(p=>p.pages||[]).sort((a,b)=>a-b);
+        const propTxt=d.props.map(p=>esc(p.property||p.bldNo)).join(" / ");
+        const pdfReady=!!pdfDoc;
+        const monthStr=(d.props[0]&&d.props[0].month)||"";
+        const accumId="exaccum-"+i;
+        return `<div class="pv-item" style="border-left:4px solid #c8a96b;margin-bottom:10px;">
+          <div class="pv-head" style="cursor:default;">
+            <span class="nm">${esc(d.owner)}</span>
+            <span class="pill" style="background:#f3ead4;color:#8a6d2f;font-weight:800;">別管理</span>
+            <span class="spacer"></span>
+            <span class="vac">${d.yearOnly?'📊 年間収支表':('PDF '+pageList.length+'ページ'+(monthStr?(' / '+esc(monthStr)):''))}</span>
+          </div>
+          <div class="pv-body open" style="padding:10px 12px;">
+            <div class="pv-meta">対象物件: <b>${propTxt||'—'}</b>　|　メール送信は行いません</div>
+            <div class="pv-actions" style="margin-top:8px;">
+              <button class="btn btn-sm btn-acc" onclick="RENT.previewOwnerPdf(${i})" ${pdfReady?'':'disabled'}>👁 明細を確認</button>
+              <button class="btn btn-sm" onclick="RENT.accumulateOwnerMonth(${i})" ${pdfReady?'':'disabled'} style="background:#2c6e49;color:#fff;border-color:#2c6e49;">➕ この月をPIVOTに蓄積</button>
+              <button class="btn btn-sm" onclick="RENT.accumulateOwnerYear(${i})" style="background:#8a6d2f;color:#fff;border-color:#8a6d2f;">📊 年間収支表を蓄積</button>
+              <button class="btn btn-sm" onclick="RENT.downloadOwnerPdf(${i})" ${pdfReady?'':'disabled'}>💾 この月をPCに保存</button>
+            </div>
+            ${pdfReady?'':'<div style="font-size:.76rem;color:var(--warn);font-weight:700;margin-top:6px;">※ 蓄積・保存するには上の枠に明細PDFを取り込んでください。</div>'}
+            <div style="margin-top:10px;font-size:.78rem;font-weight:800;color:#8a6d2f;">📚 PIVOTに蓄積済みの明細（年ごと）</div>
+            <div id="${accumId}" style="margin-top:4px;"><div style="font-size:.76rem;color:var(--rt-muted);">読み込み中…</div></div>
+            <div class="pdf-preview" id="pdfprev-${i}"></div>
+          </div>
+        </div>`;
+      }).join("");
+      // 各除外オーナーの蓄積状況を非同期で描画
+      excludedIdx.forEach(i=>{ try{ renderExAccumInto("exaccum-"+i, detail[i].owner); }catch(e){} });
+      // 12/20以降なら年末自動まとめを一度だけ実行
+      try{ autoYearEndMergeIfDue(); }catch(e){}
+    }else{
+      exSec.style.display="none";
+      exBox.innerHTML="";
+    }
+  }
   // 除外件数の案内
   const exNote=document.getElementById("rent-exclude-note");
   if(exNote){
-    if(excludedCount>0){ exNote.style.display="block"; exNote.textContent=`「送信しない」に指定したオーナー ${excludedCount} 件をプレビューから除外しています（オーナー一覧で変更できます）。`; }
+    if(excludedCount>0){ exNote.style.display="block"; exNote.textContent=`「送信しない」に指定したオーナー ${excludedCount} 件は、下の「メール送信しないオーナー（別管理）」に表示しています。`; }
     else { exNote.style.display="none"; }
   }
 }
@@ -9559,6 +9609,188 @@ async function downloadOwnerPdf(i){
   toast(d.owner+" の明細PDFを書き出しました");
 }
 
+/* =========================================================
+   除外オーナー(ソフィア等)専用: PIVOT内(端末IndexedDB)への明細蓄積
+   - Firebaseとは完全に別。物件データには一切影響しない。
+   - キー: owner|YYYY|MM(月次) / owner|YYYY|YEAR(年間収支表)
+   ========================================================= */
+const EXDB_NAME='pivot_excluded_pdf';
+const EXDB_STORE='pdfs';
+let _exDbPromise=null;
+function openExDb(){
+  if(_exDbPromise) return _exDbPromise;
+  _exDbPromise=new Promise((resolve)=>{
+    if(!window.indexedDB){ resolve(null); return; }
+    const req=indexedDB.open(EXDB_NAME,1);
+    req.onupgradeneeded=()=>{ const db=req.result; if(!db.objectStoreNames.contains(EXDB_STORE)){ db.createObjectStore(EXDB_STORE); } };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>{ console.warn('除外PDF DB open失敗:',req.error); resolve(null); };
+  });
+  return _exDbPromise;
+}
+async function exdbPut(key,rec){
+  const db=await openExDb(); if(!db) throw new Error('保存領域を開けませんでした');
+  return await new Promise((res,rej)=>{ const tx=db.transaction(EXDB_STORE,'readwrite'); tx.objectStore(EXDB_STORE).put(rec,key); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });
+}
+async function exdbGet(key){
+  const db=await openExDb(); if(!db) return null;
+  return await new Promise((res)=>{ const tx=db.transaction(EXDB_STORE,'readonly'); const r=tx.objectStore(EXDB_STORE).get(key); r.onsuccess=()=>res(r.result||null); r.onerror=()=>res(null); });
+}
+async function exdbDelete(key){
+  const db=await openExDb(); if(!db) return;
+  return await new Promise((res)=>{ const tx=db.transaction(EXDB_STORE,'readwrite'); tx.objectStore(EXDB_STORE).delete(key); tx.oncomplete=()=>res(true); tx.onerror=()=>res(false); });
+}
+async function exdbAllKeys(){
+  const db=await openExDb(); if(!db) return [];
+  return await new Promise((res)=>{ const tx=db.transaction(EXDB_STORE,'readonly'); const r=tx.objectStore(EXDB_STORE).getAllKeys(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>res([]); });
+}
+// 「2026年03月」→ {year:'2026', month:'03'}。取れなければ null
+function parseYM(monthStr){
+  const m=(monthStr||'').match(/(\d{4})年(\d{2})月/);
+  return m?{year:m[1],month:m[2]}:null;
+}
+// いま取り込んでいる除外オーナー(detail[i])の当月明細をIndexedDBへ蓄積
+async function accumulateOwnerMonth(i){
+  if(!pdfDoc){ toast('先に明細PDFを取り込んでください'); return; }
+  const d=detail[i];
+  const monthStr=(d.props[0]&&d.props[0].month)||'';
+  const ym=parseYM(monthStr);
+  if(!ym){ toast('対象月が読み取れませんでした(この明細は年間のみ等の可能性)'); return; }
+  try{
+    const b64=await makeOwnerPdfBase64(i);
+    if(!b64){ toast('明細PDFの作成に失敗しました'); return; }
+    const key=`${d.owner}|${ym.year}|${ym.month}`;
+    const exists=await exdbGet(key);
+    if(exists && !confirm(`${d.owner} の ${ym.year}年${ym.month}月分は既に蓄積済みです。上書きしますか?`)) return;
+    await exdbPut(key,{ owner:d.owner, year:ym.year, month:ym.month, kind:'month', b64, savedAt:new Date().toISOString() });
+    toast(`${d.owner} ${ym.year}年${ym.month}月分をPIVOTに蓄積しました`);
+    renderPreview();
+  }catch(e){ console.error(e); toast('蓄積に失敗しました: '+e.message); }
+}
+// 年間収支表を蓄積(除外オーナーに年間収支表が紐づいているとき)
+async function accumulateOwnerYear(i){
+  const d=detail[i];
+  const b64=await makeYearPdfBase64(d.owner);
+  if(!b64){ toast('この明細に年間収支表が見つかりません'); return; }
+  // 年は「取り込んでいる月次の年」を優先。無ければ今年
+  let year=(parseYM((d.props[0]&&d.props[0].month)||'')||{}).year || String(new Date().getFullYear());
+  try{
+    const key=`${d.owner}|${year}|YEAR`;
+    const exists=await exdbGet(key);
+    if(exists && !confirm(`${d.owner} の ${year}年 年間収支表は既に蓄積済みです。上書きしますか?`)) return;
+    await exdbPut(key,{ owner:d.owner, year, month:'YEAR', kind:'year', b64, savedAt:new Date().toISOString() });
+    toast(`${d.owner} ${year}年 年間収支表をPIVOTに蓄積しました`);
+    renderPreview();
+  }catch(e){ console.error(e); toast('年間収支表の蓄積に失敗しました: '+e.message); }
+}
+// あるオーナーの蓄積状況を年ごとに集計 → {year:{months:Set, hasYear:bool}}
+async function loadExAccum(ownerName){
+  const keys=await exdbAllKeys();
+  const byYear={};
+  keys.forEach(k=>{
+    const parts=String(k).split('|');
+    if(parts.length!==3) return;
+    const [own,year,mm]=parts;
+    if(own!==ownerName) return;
+    (byYear[year]=byYear[year]||{months:new Set(),hasYear:false});
+    if(mm==='YEAR') byYear[year].hasYear=true; else byYear[year].months.add(mm);
+  });
+  return byYear;
+}
+// 除外オーナーの、ある年の 1〜12月＋年間 を1つのPDFに結合してダウンロード
+async function mergeYearForOwner(ownerName,year){
+  try{
+    const out=await PDFLib.PDFDocument.create();
+    let added=0;
+    for(let m=1;m<=12;m++){
+      const mm=String(m).padStart(2,'0');
+      const rec=await exdbGet(`${ownerName}|${year}|${mm}`);
+      if(rec && rec.b64){
+        const src=await PDFLib.PDFDocument.load(_b64ToBytes(rec.b64));
+        const pages=await out.copyPages(src,src.getPageIndices());
+        pages.forEach(p=>out.addPage(p)); added++;
+      }
+    }
+    const yearRec=await exdbGet(`${ownerName}|${year}|YEAR`);
+    if(yearRec && yearRec.b64){
+      const src=await PDFLib.PDFDocument.load(_b64ToBytes(yearRec.b64));
+      const pages=await out.copyPages(src,src.getPageIndices());
+      pages.forEach(p=>out.addPage(p)); added++;
+    }
+    if(!added){ toast('この年の蓄積データがありません'); return; }
+    const bytes=await out.save();
+    const blob=new Blob([bytes],{type:'application/pdf'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`${ownerName}_${year}年_年間まとめ.pdf`.replace(/\s/g,'');
+    a.click();
+    toast(`${ownerName} ${year}年分(${added}件)を1つのPDFにまとめました`);
+  }catch(e){ console.error(e); toast('まとめPDFの作成に失敗しました: '+e.message); }
+}
+function _b64ToBytes(b64){
+  const bin=atob(b64); const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return arr;
+}
+// 12/20以降かどうか(年末自動まとめの解禁判定)
+function isYearEndOpen(){
+  const now=new Date();
+  return (now.getMonth()===11 && now.getDate()>=20); // 12月=month11
+}
+// 蓄積済みの1件を削除
+async function deleteExAccum(ownerName,year,mm){
+  const label=mm==='YEAR'?`${year}年 年間収支表`:`${year}年${mm}月分`;
+  if(!confirm(`${ownerName} の ${label} を蓄積から削除しますか?`)) return;
+  await exdbDelete(`${ownerName}|${year}|${mm}`);
+  toast('削除しました');
+  renderPreview();
+}
+// 除外オーナーカード内に「年ごとの蓄積状況」HTMLを組み立てて差し込む(非同期)
+async function renderExAccumInto(containerId,ownerName){
+  const el=document.getElementById(containerId);
+  if(!el) return;
+  const byYear=await loadExAccum(ownerName);
+  const years=Object.keys(byYear).sort((a,b)=>b.localeCompare(a));
+  if(!years.length){ el.innerHTML='<div style="font-size:.76rem;color:var(--rt-muted);">まだ蓄積された明細はありません。</div>'; return; }
+  const yearEnd=isYearEndOpen();
+  el.innerHTML=years.map(y=>{
+    const info=byYear[y];
+    const cells=[];
+    for(let m=1;m<=12;m++){
+      const mm=String(m).padStart(2,'0');
+      const has=info.months.has(mm);
+      cells.push(`<span title="${has?'蓄積済み（クリックで削除）':'未蓄積'}" ${has?`onclick="RENT.deleteExAccum('${esc(ownerName)}','${y}','${mm}')" style="cursor:pointer;"`:''} class="ex-mchip" style="display:inline-block;min-width:30px;text-align:center;padding:3px 4px;margin:2px;border-radius:5px;font-size:.72rem;font-weight:700;${has?'background:#2c6e49;color:#fff;':'background:#eee;color:#aaa;'}">${m}月</span>`);
+    }
+    const yChip=`<span ${info.hasYear?`onclick="RENT.deleteExAccum('${esc(ownerName)}','${y}','YEAR')" style="cursor:pointer;"`:''} class="ex-mchip" style="display:inline-block;padding:3px 6px;margin:2px;border-radius:5px;font-size:.72rem;font-weight:800;${info.hasYear?'background:#8a6d2f;color:#fff;':'background:#eee;color:#aaa;'}">📊年間</span>`;
+    const cnt=info.months.size;
+    return `<div style="margin-top:8px;padding:8px;border:1px solid #e3d9c4;border-radius:8px;background:#fff;">
+      <div style="font-weight:800;color:#8a6d2f;font-size:.82rem;margin-bottom:4px;">${y}年 <span style="font-weight:600;color:var(--rt-muted);">（月次 ${cnt}/12 ・ ${info.hasYear?'年間あり':'年間なし'}）</span></div>
+      <div>${cells.join('')} ${yChip}</div>
+      <div style="margin-top:8px;">
+        <button class="btn btn-sm" onclick="RENT.mergeYearForOwner('${esc(ownerName)}','${y}')" style="background:#8a6d2f;color:#fff;border-color:#8a6d2f;">🖨 ${y}年分を1つのPDFにまとめる（${cnt+(info.hasYear?1:0)}件）</button>
+        ${yearEnd?'<span style="font-size:.72rem;color:#2c6e49;font-weight:700;margin-left:6px;">年末まとめOK</span>':'<span style="font-size:.72rem;color:var(--rt-muted);margin-left:6px;">※いつでもまとめられます（自動解禁:12/20〜）</span>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+// 12/20以降の年末自動まとめ: 未生成ならその年のまとめPDFを1回だけ自動ダウンロード
+async function autoYearEndMergeIfDue(){
+  if(!isYearEndOpen()) return;
+  const year=String(new Date().getFullYear());
+  const flagKey='rent_exaccum_autoyear_'+year;
+  if(localStorage.getItem(flagKey)) return; // その年は実行済み
+  // 除外オーナーで、その年の蓄積があるものを対象
+  const excludedOwners=owners.filter(o=>o.exclude).map(o=>o.name);
+  let did=false;
+  for(const own of excludedOwners){
+    const byYear=await loadExAccum(own);
+    if(byYear[year] && (byYear[year].months.size>0 || byYear[year].hasYear)){
+      await mergeYearForOwner(own,year); did=true;
+    }
+  }
+  if(did){ localStorage.setItem(flagKey,'1'); }
+}
+
 /* タブ表示時に初期化(初回のみ実体化) */
 let _rentBooted=false;
 function activate(){
@@ -9574,7 +9806,7 @@ function activate(){
 }
 
 
-window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, renderHistory, clearHistory, checkBounces };
+window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, renderHistory, clearHistory, checkBounces, accumulateOwnerMonth, accumulateOwnerYear, mergeYearForOwner, deleteExAccum };
 })();
 </script>
 <script>
