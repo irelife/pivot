@@ -8697,7 +8697,14 @@ function flashSaved(){ const el=document.getElementById("ownerSaveStat"); if(!el
 function editOwner(i,f,v){ owners[i][f]=v; saveOwners(); flashSaved(); if(f==="exclude"){ renderOwners(); renderPreview(); return; } if(detail && detail.length){ const o=owners[i]; detail.forEach(d=>{ if(d.owner===o.name && f==="email") d.email=v; }); if(f==="email") renderPreview(); } }
 function editProps(i,v){ const arr=v.split("\n").map(s=>s.trim()).filter(Boolean); owners[i].properties=arr; owners[i].property=arr.join("、"); saveOwners(); flashSaved(); }
 function addOwnerRow(){ owners.unshift({name:"",properties:[],property:"",atena:"",email:""}); saveOwners(); renderOwners(); flashSaved(); toast("新規オーナーを追加しました（自動保存）"); }
-function delOwner(i){ if(!confirm("この行を削除しますか?"))return; owners.splice(i,1); saveOwners(); renderOwners(); }
+function delOwner(i){ if(!confirm("この行を削除しますか?"))return; const removed=owners[i]&&owners[i].name; owners.splice(i,1); saveOwners(); renderOwners();
+  // 送信一覧(取込結果)からも同名オーナーのカードを外す
+  if(removed && detail && detail.length){
+    const before=detail.length;
+    detail=detail.filter(d=>norm(d.owner)!==norm(removed));
+    if(detail.length!==before){ sentSet=new Set(); saveDetailState(); renderPreview(); }
+  }
+}
 
 /* ===== PDF取込 ===== */
 const drop=document.getElementById("drop"), pdfInput=document.getElementById("pdfInput");
@@ -9244,6 +9251,7 @@ function renderPreview(){
           <button class="btn btn-sm" onclick="RENT.downloadOwnerPdf(${i})">📎 PDF書出し</button>
           <button class="btn btn-sm" onclick="RENT.copyBody(${i})">本文コピー</button>
           ${sentSet.has(i)?`<button class="btn btn-sm btn-warn" onclick="RENT.unsendOne(${i})">↩ 未送信へ戻す</button>`:''}
+          <button class="btn btn-sm btn-warn" onclick="RENT.removeFromList(${i})" title="この取込結果から外す（オーナー登録は消えません）">✕ 一覧から外す</button>
         </div>
         <div class="pdf-preview" id="pdfprev-${i}"></div>
       </div>
@@ -9487,7 +9495,17 @@ function unsendOne(i){
   toast("未送信に戻しました");
 }
 
-/* 個別: 1オーナーだけ送信 */
+/* 送信一覧(取込結果)から、このオーナーのカードだけを外す。オーナー登録は消さない */
+function removeFromList(i){
+  if(!detail || !detail[i]) return;
+  const name=detail[i].owner;
+  if(!confirm(`「${name}」を、この取込結果の一覧から外します。\n（オーナー登録は消えません。次回PDFを取り込むとまた表示されます）`)) return;
+  detail.splice(i,1);
+  sentSet=new Set();           // indexがずれるため送信済みマークはリセット
+  saveDetailState();
+  renderPreview();
+  toast(`${name} を一覧から外しました`);
+}
 async function sendOne(i){
   if(!(detail[i].email||"").trim()){ toast("メール未登録です"); return; }
   if(!confirm(`${detail[i].owner}（${detail[i].email}）に送信します。よろしいですか?\n※送信は取り消せません。`)) return;
@@ -9797,7 +9815,7 @@ async function renderExAccumInto(containerId,ownerName){
     for(let m=1;m<=12;m++){
       const mm=String(m).padStart(2,'0');
       const has=info.months.has(mm);
-      cells.push(`<span title="${has?'蓄積済み（クリックで削除）':'未蓄積'}" ${has?`onclick="RENT.deleteExAccum('${esc(ownerName)}','${y}','${mm}')" style="cursor:pointer;"`:''} class="ex-mchip" style="display:inline-block;min-width:30px;text-align:center;padding:3px 4px;margin:2px;border-radius:5px;font-size:.72rem;font-weight:700;${has?'background:#2c6e49;color:#fff;':'background:#eee;color:#aaa;'}">${m}月</span>`);
+      cells.push(`<span title="${has?'蓄積済み（クリックで削除）':'未蓄積'}" ${has?`onclick="RENT.deleteExAccum('${esc(ownerName)}','${y}','${mm}')" style="cursor:pointer;"`:''} class="ex-mchip" style="display:inline-block;min-width:30px;text-align:center;padding:3px 4px;margin:2px;border-radius:5px;font-size:.72rem;font-weight:700;${has?'background:#1565c0;color:#fff;':'background:#eee;color:#aaa;'}">${m}月</span>`);
     }
     const yChip=`<span ${info.hasYear?`onclick="RENT.deleteExAccum('${esc(ownerName)}','${y}','YEAR')" style="cursor:pointer;"`:''} class="ex-mchip" style="display:inline-block;padding:3px 6px;margin:2px;border-radius:5px;font-size:.72rem;font-weight:800;${info.hasYear?'background:#8a6d2f;color:#fff;':'background:#eee;color:#aaa;'}">📊年間</span>`;
     const cnt=info.months.size;
@@ -9845,7 +9863,7 @@ function activate(){
 }
 
 
-window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, renderHistory, clearHistory, checkBounces, accumulateOwnerMonth, accumulateOwnerYear, mergeYearForOwner, deleteExAccum, deleteExYear };
+window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, removeFromList, renderHistory, clearHistory, checkBounces, accumulateOwnerMonth, accumulateOwnerYear, mergeYearForOwner, deleteExAccum, deleteExYear };
 })();
 </script>
 <script>
