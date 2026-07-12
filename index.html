@@ -9285,8 +9285,8 @@ function renderPreview(){
           </div>
         </div>`;
       }).join("");
-      // 各除外オーナーの蓄積状況を非同期で描画
-      excludedIdx.forEach(i=>{ try{ renderExAccumInto("exaccum-"+i, detail[i].owner); }catch(e){} });
+      // 旧1桁キーを一度だけ2桁へ正規化してから各オーナーの蓄積状況を描画
+      (async()=>{ try{ await migrateExAccumKeys(); }catch(e){} excludedIdx.forEach(i=>{ try{ renderExAccumInto("exaccum-"+i, detail[i].owner); }catch(e){} }); })();
       // 12/20以降なら年末自動まとめを一度だけ実行
       try{ autoYearEndMergeIfDue(); }catch(e){}
     }else{
@@ -9644,10 +9644,11 @@ async function exdbAllKeys(){
   const db=await openExDb(); if(!db) return [];
   return await new Promise((res)=>{ const tx=db.transaction(EXDB_STORE,'readonly'); const r=tx.objectStore(EXDB_STORE).getAllKeys(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>res([]); });
 }
-// 「2026年03月」→ {year:'2026', month:'03'}。取れなければ null
+// 「2026年03月」「2026年6月」→ {year:'2026', month:'06'}。取れなければ null
 function parseYM(monthStr){
-  const m=(monthStr||'').match(/(\d{4})年(\d{2})月/);
-  return m?{year:m[1],month:m[2]}:null;
+  const m=(monthStr||'').match(/(\d{4})年\s*(\d{1,2})月/);
+  if(!m) return null;
+  return { year:m[1], month:String(parseInt(m[2],10)).padStart(2,'0') };
 }
 // いま取り込んでいる除外オーナー(detail[i])の当月明細をIndexedDBへ蓄積
 async function accumulateOwnerMonth(i){
@@ -9690,12 +9691,33 @@ async function loadExAccum(ownerName){
   keys.forEach(k=>{
     const parts=String(k).split('|');
     if(parts.length!==3) return;
-    const [own,year,mm]=parts;
+    let [own,year,mm]=parts;
     if(own!==ownerName) return;
+    // 月は2桁に正規化（旧「6」と新「06」を同一視して緑表示のズレを防ぐ）
+    if(mm!=='YEAR' && /^\d{1,2}$/.test(mm)) mm=String(parseInt(mm,10)).padStart(2,'0');
     (byYear[year]=byYear[year]||{months:new Set(),hasYear:false});
     if(mm==='YEAR') byYear[year].hasYear=true; else byYear[year].months.add(mm);
   });
   return byYear;
+}
+// 旧バージョンで「年|6」のように1桁で保存されたキーを「年|06」に一度だけ直す
+async function migrateExAccumKeys(){
+  try{
+    if(localStorage.getItem('rent_exaccum_migrated_v1')) return;
+    const keys=await exdbAllKeys();
+    for(const k of keys){
+      const parts=String(k).split('|');
+      if(parts.length!==3) continue;
+      const [own,year,mm]=parts;
+      if(mm==='YEAR' || !/^\d{1,2}$/.test(mm)) continue;
+      const mm2=String(parseInt(mm,10)).padStart(2,'0');
+      if(mm2===mm) continue; // 既に2桁
+      const newKey=`${own}|${year}|${mm2}`;
+      const rec=await exdbGet(k);
+      if(rec){ rec.month=mm2; await exdbPut(newKey,rec); await exdbDelete(k); }
+    }
+    localStorage.setItem('rent_exaccum_migrated_v1','1');
+  }catch(e){ console.warn('exaccum migrate:',e); }
 }
 // 除外オーナーの、ある年の 1〜12月＋年間 を1つのPDFに結合してダウンロード
 async function mergeYearForOwner(ownerName,year){
@@ -9704,7 +9726,8 @@ async function mergeYearForOwner(ownerName,year){
     let added=0;
     for(let m=1;m<=12;m++){
       const mm=String(m).padStart(2,'0');
-      const rec=await exdbGet(`${ownerName}|${year}|${mm}`);
+      let rec=await exdbGet(`${ownerName}|${year}|${mm}`);
+      if(!(rec && rec.b64)){ rec=await exdbGet(`${ownerName}|${year}|${m}`); } // 旧1桁キーの保険
       if(rec && rec.b64){
         const src=await PDFLib.PDFDocument.load(_b64ToBytes(rec.b64));
         const pages=await out.copyPages(src,src.getPageIndices());
@@ -9742,7 +9765,22 @@ async function deleteExAccum(ownerName,year,mm){
   const label=mm==='YEAR'?`${year}年 年間収支表`:`${year}年${mm}月分`;
   if(!confirm(`${ownerName} の ${label} を蓄積から削除しますか?`)) return;
   await exdbDelete(`${ownerName}|${year}|${mm}`);
+  // 旧1桁キーの保険も消す
+  if(mm!=='YEAR'){ await exdbDelete(`${ownerName}|${year}|${parseInt(mm,10)}`); }
   toast('削除しました');
+  renderPreview();
+}
+// ある年の蓄積を一括削除（前年不要になったとき用）
+async function deleteExYear(ownerName,year){
+  if(!confirm(`${ownerName} の ${year}年分（月次・年間すべて）を蓄積から削除します。\nまとめPDFを書き出し済みか確認してください。よろしいですか?`)) return;
+  const keys=await exdbAllKeys();
+  let n=0;
+  for(const k of keys){
+    const parts=String(k).split('|');
+    if(parts.length!==3) continue;
+    if(parts[0]===ownerName && parts[1]===year){ await exdbDelete(k); n++; }
+  }
+  toast(`${year}年分 ${n}件を削除しました`);
   renderPreview();
 }
 // 除外オーナーカード内に「年ごとの蓄積状況」HTMLを組み立てて差し込む(非同期)
@@ -9768,6 +9806,7 @@ async function renderExAccumInto(containerId,ownerName){
       <div>${cells.join('')} ${yChip}</div>
       <div style="margin-top:8px;">
         <button class="btn btn-sm" onclick="RENT.mergeYearForOwner('${esc(ownerName)}','${y}')" style="background:#8a6d2f;color:#fff;border-color:#8a6d2f;">🖨 ${y}年分を1つのPDFにまとめる（${cnt+(info.hasYear?1:0)}件）</button>
+        <button class="btn btn-sm btn-warn" onclick="RENT.deleteExYear('${esc(ownerName)}','${y}')" title="この年の蓄積をすべて削除">🗑 ${y}年分を削除</button>
         ${yearEnd?'<span style="font-size:.72rem;color:#2c6e49;font-weight:700;margin-left:6px;">年末まとめOK</span>':'<span style="font-size:.72rem;color:var(--rt-muted);margin-left:6px;">※いつでもまとめられます（自動解禁:12/20〜）</span>'}
       </div>
     </div>`;
@@ -9806,7 +9845,7 @@ function activate(){
 }
 
 
-window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, renderHistory, clearHistory, checkBounces, accumulateOwnerMonth, accumulateOwnerYear, mergeYearForOwner, deleteExAccum };
+window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, renderHistory, clearHistory, checkBounces, accumulateOwnerMonth, accumulateOwnerYear, mergeYearForOwner, deleteExAccum, deleteExYear };
 })();
 </script>
 <script>
