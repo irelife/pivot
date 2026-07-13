@@ -9177,9 +9177,37 @@ function fill(s,d){
   return out;
 }
 
+// 明細PDF未取込でも、除外オーナー登録があれば「閲覧専用」カードを表示（スマホ等）
+function renderExcludedViewOnly(){
+  const exSec=document.getElementById("rent-excluded-section");
+  const exBox=document.getElementById("excludedPreview");
+  if(!exSec || !exBox) return;
+  const exOwners=owners.filter(o=>o.exclude);
+  if(!exOwners.length){ exSec.style.display="none"; exBox.innerHTML=""; return; }
+  exSec.style.display="block";
+  const _gu=document.getElementById('sophiaGasUrl'); if(_gu && !_gu.value){ _gu.value=getSophiaGasUrl(); }
+  exBox.innerHTML=exOwners.map((o,k)=>{
+    const accumId="exaccumV-"+k;
+    return `<div class="pv-item" style="border-left:4px solid #c8a96b;margin-bottom:10px;">
+      <div class="pv-head" style="cursor:default;">
+        <span class="nm">${esc(o.name)}</span>
+        <span class="pill" style="background:#f3ead4;color:#8a6d2f;font-weight:800;">別管理</span>
+        <span class="spacer"></span>
+        <span class="vac" style="color:#1565c0;">👁 閲覧のみ</span>
+      </div>
+      <div class="pv-body open" style="padding:10px 12px;">
+        <div style="font-size:.78rem;color:var(--rt-muted);margin-bottom:6px;">明細PDFを取り込んでいないため閲覧専用です。月をタップすると明細が開きます。蓄積するにはPCで明細PDFを取り込んでください。</div>
+        <div style="margin-top:4px;font-size:.78rem;font-weight:800;color:#8a6d2f;">📚 共用Driveに蓄積済みの明細（年ごと）</div>
+        <div id="${accumId}" style="margin-top:4px;"><div style="font-size:.76rem;color:var(--rt-muted);">読み込み中…</div></div>
+      </div>
+    </div>`;
+  }).join("");
+  (async()=>{ for(let k=0;k<exOwners.length;k++){ try{ await renderExAccumInto("exaccumV-"+k, exOwners[k].name); }catch(e){} } })();
+}
+
 function renderPreview(){
   const box=document.getElementById("preview");
-  if(!detail.length){ box.innerHTML='<div class="empty">まず上の「明細PDFをここにドロップ」から収支報告書PDFを取り込んでください。<br>取り込むと、オーナーごとに「宛先・件名・本文（空き予定の一言入り）・添付される明細PDF」がここに一覧表示され、送信前に確認できます。</div>'; return; }
+  if(!detail.length){ box.innerHTML='<div class="empty">まず上の「明細PDFをここにドロップ」から収支報告書PDFを取り込んでください。<br>取り込むと、オーナーごとに「宛先・件名・本文（空き予定の一言入り）・添付される明細PDF」がここに一覧表示され、送信前に確認できます。</div>'; renderExcludedViewOnly(); return; }
   // オーナー一覧の最新メールを引き直す(未登録のものだけ補完。手入力済みは尊重)
   detail.forEach(d=>{
     if(!d.email){ const o=owners.find(o=>o.name===d.owner); if(o&&o.email) d.email=o.email; }
@@ -9313,8 +9341,8 @@ function renderPreview(){
       // 12/20以降なら年末自動まとめを一度だけ実行
       try{ autoYearEndMergeIfDue(); }catch(e){}
     }else{
-      exSec.style.display="none";
-      exBox.innerHTML="";
+      // 明細を取り込んでいないが、除外オーナー登録がある場合は「閲覧専用」カードを出す
+      renderExcludedViewOnly();
     }
   }
   // 除外件数の案内
