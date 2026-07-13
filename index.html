@@ -9695,11 +9695,15 @@ async function accumulateOwnerMonth(i){
   const ym=parseYM((d.props[0]&&d.props[0].month)||'');
   if(!ym){ toast('対象月が読み取れませんでした(この明細は年間のみ等の可能性)'); return; }
   try{
+    // 既に同じ月が蓄積済みなら上書き確認
+    const acc=await loadExAccum(d.owner);
+    const already=acc[ym.year] && acc[ym.year].months && acc[ym.year].months.has(ym.month);
+    if(already && !confirm(`${d.owner} の ${ym.year}年${parseInt(ym.month,10)}月分は既に共用Driveに蓄積済みです。\n上書きしますか?`)) return;
     toast('共用Driveへ保存中…');
     const b64=await makeOwnerPdfBase64(i);
     if(!b64){ toast('明細PDFの作成に失敗しました'); return; }
     await sophiaGasCall({ action:'save', owner:d.owner, year:ym.year, month:ym.month, kind:'month', b64 });
-    toast(`${d.owner} ${ym.year}年${ym.month}月分を共用Driveに保存しました`);
+    toast(`${d.owner} ${ym.year}年${parseInt(ym.month,10)}月分を共用Driveに保存しました`);
     renderPreview();
   }catch(e){ console.error(e); toast('保存に失敗: '+e.message); }
 }
@@ -9710,6 +9714,8 @@ async function accumulateOwnerYear(i){
     const b64=await makeYearPdfBase64(d.owner);
     if(!b64){ toast('この明細に年間収支表が見つかりません'); return; }
     let year=(parseYM((d.props[0]&&d.props[0].month)||'')||{}).year || String(new Date().getFullYear());
+    const acc=await loadExAccum(d.owner);
+    if(acc[year] && acc[year].hasYear && !confirm(`${d.owner} の ${year}年 年間収支表は既に共用Driveに蓄積済みです。\n上書きしますか?`)) return;
     toast('共用Driveへ保存中…');
     await sophiaGasCall({ action:'save', owner:d.owner, year, month:'YEAR', kind:'year', b64 });
     toast(`${d.owner} ${year}年 年間収支表を共用Driveに保存しました`);
@@ -9759,6 +9765,30 @@ function _b64ToBytes(b64){
   for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
   return arr;
 }
+// 蓄積済みの1件(月次または年間)を新しいタブで開く
+async function viewExAccum(ownerName,year,mm){
+  try{
+    toast('共用Driveから取得中…');
+    const data=await sophiaGasCall({ action:'merge', owner:ownerName, year });
+    const items=data.items||[];
+    // mm='03'なら「YYYY年03月」を、'YEAR'なら「年間収支表」を含むファイルを探す
+    const target=items.find(it=>{
+      if(mm==='YEAR') return /年_年間収支表_/.test(it.name);
+      return new RegExp(year+'年'+mm+'月_').test(it.name);
+    });
+    if(!target || !target.b64){ toast('その明細が見つかりませんでした'); return; }
+    const bytes=_b64ToBytes(target.b64);
+    const blob=new Blob([bytes],{type:'application/pdf'});
+    const url=URL.createObjectURL(blob);
+    const win=window.open(url,'_blank');
+    if(!win){ // ポップアップブロック時はダウンロードにフォールバック
+      const a=document.createElement('a'); a.href=url; a.download=target.name; a.click();
+      toast('新しいタブが開けなかったため、ダウンロードしました');
+    }else{
+      toast('明細を新しいタブで開きました');
+    }
+  }catch(e){ console.error(e); toast('表示に失敗: '+e.message); }
+}
 // 12/20以降かどうか(年末自動まとめの解禁判定)
 function isYearEndOpen(){
   const now=new Date();
@@ -9807,9 +9837,9 @@ async function renderExAccumInto(containerId,ownerName,cardIdx){
     for(let m=1;m<=12;m++){
       const mm=String(m).padStart(2,'0');
       const has=info.months.has(mm);
-      cells.push(`<span title="${has?'蓄積済み（クリックで削除）':'未蓄積'}" ${has?`onclick="RENT.deleteExAccum('${esc(ownerName)}','${y}','${mm}')" style="cursor:pointer;"`:''} class="ex-mchip" style="display:inline-block;min-width:30px;text-align:center;padding:3px 4px;margin:2px;border-radius:5px;font-size:.72rem;font-weight:700;${has?'background:#1565c0;color:#fff;':'background:#eee;color:#aaa;'}">${m}月</span>`);
+      cells.push(`<span title="${has?'クリックで明細を表示':'未蓄積'}" ${has?`onclick="RENT.viewExAccum('${esc(ownerName)}','${y}','${mm}')" style="cursor:pointer;"`:''} class="ex-mchip" style="display:inline-block;min-width:30px;text-align:center;padding:3px 4px;margin:2px;border-radius:5px;font-size:.72rem;font-weight:700;${has?'background:#1565c0;color:#fff;':'background:#eee;color:#aaa;'}">${m}月</span>`);
     }
-    const yChip=`<span ${info.hasYear?`onclick="RENT.deleteExAccum('${esc(ownerName)}','${y}','YEAR')" style="cursor:pointer;"`:''} class="ex-mchip" style="display:inline-block;padding:3px 6px;margin:2px;border-radius:5px;font-size:.72rem;font-weight:800;${info.hasYear?'background:#8a6d2f;color:#fff;':'background:#eee;color:#aaa;'}">📊年間</span>`;
+    const yChip=`<span title="${info.hasYear?'クリックで年間収支表を表示':'未蓄積'}" ${info.hasYear?`onclick="RENT.viewExAccum('${esc(ownerName)}','${y}','YEAR')" style="cursor:pointer;"`:''} class="ex-mchip" style="display:inline-block;padding:3px 6px;margin:2px;border-radius:5px;font-size:.72rem;font-weight:800;${info.hasYear?'background:#8a6d2f;color:#fff;':'background:#eee;color:#aaa;'}">📊年間</span>`;
     const cnt=info.months.size;
     return `<div style="margin-top:8px;padding:8px;border:1px solid #e3d9c4;border-radius:8px;background:#fff;">
       <div style="font-weight:800;color:#8a6d2f;font-size:.82rem;margin-bottom:4px;">${y}年 <span style="font-weight:600;color:var(--rt-muted);">（月次 ${cnt}/12 ・ ${info.hasYear?'年間あり':'年間なし'}）</span></div>
@@ -9855,7 +9885,7 @@ function activate(){
 }
 
 
-window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, removeFromList, renderHistory, clearHistory, checkBounces, accumulateOwnerMonth, accumulateOwnerYear, mergeYearForOwner, deleteExAccum, deleteExYear, saveSophiaGasUrl };
+window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, removeFromList, renderHistory, clearHistory, checkBounces, accumulateOwnerMonth, accumulateOwnerYear, mergeYearForOwner, deleteExAccum, deleteExYear, saveSophiaGasUrl, viewExAccum };
 })();
 </script>
 <script>
