@@ -1980,7 +1980,13 @@ body.tab-kanban .kb-toolbar { display:flex; }
     <div class="preview" id="preview"><div class="empty">明細PDFを取り込むと、オーナーごとの送信内容がここに表示されます。</div></div>
     <div id="rent-excluded-section" style="display:none;margin-top:18px;border:2px dashed #c8a96b;border-radius:10px;padding:12px 14px;background:#fdfaf3;">
       <div style="font-weight:800;color:#8a6d2f;font-size:.92rem;margin-bottom:4px;">🔒 メール送信しないオーナー（別管理）</div>
-      <div style="font-size:.78rem;color:var(--rt-muted);margin-bottom:10px;">「除外」に指定したオーナーです。メールは送らず、明細PDFをこちらから書き出して保存できます。</div>
+      <div style="font-size:.78rem;color:var(--rt-muted);margin-bottom:10px;">「除外」に指定したオーナーです。メールは送らず、明細PDFを共用Drive（社員全員が閲覧・蓄積可）に保存します。</div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="font-size:.74rem;font-weight:700;color:#8a6d2f;">共用Drive連携URL:</span>
+        <input id="sophiaGasUrl" placeholder="GASウェブアプリのURL（/exec）" style="flex:1;min-width:220px;font-size:.74rem;padding:5px 8px;border:1px solid #d9c9a8;border-radius:6px;">
+        <button class="btn btn-sm" onclick="RENT.saveSophiaGasUrl()" style="background:#2c6e49;color:#fff;border-color:#2c6e49;">保存</button>
+        <span id="sophiaGasStat" style="font-size:.72rem;"></span>
+      </div>
       <div id="excludedPreview"></div>
     </div>
   </div>
@@ -9265,6 +9271,7 @@ function renderPreview(){
   if(exSec && exBox){
     if(excludedIdx.length){
       exSec.style.display="block";
+      const _gu=document.getElementById('sophiaGasUrl'); if(_gu && !_gu.value){ _gu.value=getSophiaGasUrl(); }
       exBox.innerHTML=excludedIdx.map(i=>{
         const d=detail[i];
         const pageList=d.props.flatMap(p=>p.pages||[]).sort((a,b)=>a-b);
@@ -9295,7 +9302,7 @@ function renderPreview(){
         </div>`;
       }).join("");
       // 旧1桁キーを一度だけ2桁へ正規化してから各オーナーの蓄積状況を描画
-      (async()=>{ try{ await migrateExAccumKeys(); }catch(e){} excludedIdx.forEach(i=>{ try{ renderExAccumInto("exaccum-"+i, detail[i].owner); }catch(e){} }); })();
+      (async()=>{ excludedIdx.forEach(i=>{ try{ renderExAccumInto("exaccum-"+i, detail[i].owner); }catch(e){} }); })();
       // 12/20以降なら年末自動まとめを一度だけ実行
       try{ autoYearEndMergeIfDue(); }catch(e){}
     }else{
@@ -9633,35 +9640,40 @@ async function downloadOwnerPdf(i){
    - Firebaseとは完全に別。物件データには一切影響しない。
    - キー: owner|YYYY|MM(月次) / owner|YYYY|YEAR(年間収支表)
    ========================================================= */
-const EXDB_NAME='pivot_excluded_pdf';
-const EXDB_STORE='pdfs';
-let _exDbPromise=null;
-function openExDb(){
-  if(_exDbPromise) return _exDbPromise;
-  _exDbPromise=new Promise((resolve)=>{
-    if(!window.indexedDB){ resolve(null); return; }
-    const req=indexedDB.open(EXDB_NAME,1);
-    req.onupgradeneeded=()=>{ const db=req.result; if(!db.objectStoreNames.contains(EXDB_STORE)){ db.createObjectStore(EXDB_STORE); } };
-    req.onsuccess=()=>resolve(req.result);
-    req.onerror=()=>{ console.warn('除外PDF DB open失敗:',req.error); resolve(null); };
+/* =========================================================
+   除外オーナー(ソフィア等)専用: 共用Drive(GAS経由)への明細蓄積
+   - Firebaseとは完全に別。物件データには一切影響しない。
+   - 社員全員が同じDriveを参照・蓄積できる。
+   ========================================================= */
+const SOPHIA_GAS_KEY='sophia_gas_url_v1';
+const SOPHIA_GAS_DEFAULT='https://script.google.com/macros/s/AKfycbziyfOAZHMr1m9ocFJrl0uLPGg5pwSZoHbb_gJETlEbGlHcHdmu6ZglOVl7TwJqMYuq/exec';
+function getSophiaGasUrl(){ try{ return localStorage.getItem(SOPHIA_GAS_KEY)||SOPHIA_GAS_DEFAULT; }catch(e){ return SOPHIA_GAS_DEFAULT; } }
+function saveSophiaGasUrl(){
+  const el=document.getElementById('sophiaGasUrl'); if(!el) return;
+  const url=(el.value||'').trim();
+  const stat=document.getElementById('sophiaGasStat');
+  if(url && !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url)){
+    if(stat){ stat.textContent='※ URLの形式が違うようです'; stat.style.color='#c0392b'; }
+    return;
+  }
+  try{ localStorage.setItem(SOPHIA_GAS_KEY,url); }catch(e){}
+  if(stat){ stat.textContent='保存しました'; stat.style.color='#2c6e49'; }
+  renderPreview();
+}
+// GASにPOSTして結果(JSON)を返す
+async function sophiaGasCall(payload){
+  const url=getSophiaGasUrl();
+  if(!url) throw new Error('共用Drive連携URLが未設定です（別管理の上部で設定してください）');
+  const res=await fetch(url,{
+    method:'POST',
+    // GASのdoPostはe.postData.contentsで受けるため、text/plainで送る(プリフライト回避)
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify(payload)
   });
-  return _exDbPromise;
-}
-async function exdbPut(key,rec){
-  const db=await openExDb(); if(!db) throw new Error('保存領域を開けませんでした');
-  return await new Promise((res,rej)=>{ const tx=db.transaction(EXDB_STORE,'readwrite'); tx.objectStore(EXDB_STORE).put(rec,key); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });
-}
-async function exdbGet(key){
-  const db=await openExDb(); if(!db) return null;
-  return await new Promise((res)=>{ const tx=db.transaction(EXDB_STORE,'readonly'); const r=tx.objectStore(EXDB_STORE).get(key); r.onsuccess=()=>res(r.result||null); r.onerror=()=>res(null); });
-}
-async function exdbDelete(key){
-  const db=await openExDb(); if(!db) return;
-  return await new Promise((res)=>{ const tx=db.transaction(EXDB_STORE,'readwrite'); tx.objectStore(EXDB_STORE).delete(key); tx.oncomplete=()=>res(true); tx.onerror=()=>res(false); });
-}
-async function exdbAllKeys(){
-  const db=await openExDb(); if(!db) return [];
-  return await new Promise((res)=>{ const tx=db.transaction(EXDB_STORE,'readonly'); const r=tx.objectStore(EXDB_STORE).getAllKeys(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>res([]); });
+  if(!res.ok) throw new Error('通信エラー(HTTP '+res.status+')');
+  const data=await res.json();
+  if(data && data.ok===false) throw new Error(data.error||'GAS側でエラー');
+  return data;
 }
 // 「2026年03月」「2026年6月」→ {year:'2026', month:'06'}。取れなければ null
 function parseYM(monthStr){
@@ -9669,105 +9681,71 @@ function parseYM(monthStr){
   if(!m) return null;
   return { year:m[1], month:String(parseInt(m[2],10)).padStart(2,'0') };
 }
-// いま取り込んでいる除外オーナー(detail[i])の当月明細をIndexedDBへ蓄積
+// いま取り込んでいる除外オーナー(detail[i])の当月明細を共用Driveへ蓄積
 async function accumulateOwnerMonth(i){
   if(!pdfDoc){ toast('先に明細PDFを取り込んでください'); return; }
   const d=detail[i];
-  const monthStr=(d.props[0]&&d.props[0].month)||'';
-  const ym=parseYM(monthStr);
+  const ym=parseYM((d.props[0]&&d.props[0].month)||'');
   if(!ym){ toast('対象月が読み取れませんでした(この明細は年間のみ等の可能性)'); return; }
   try{
+    toast('共用Driveへ保存中…');
     const b64=await makeOwnerPdfBase64(i);
     if(!b64){ toast('明細PDFの作成に失敗しました'); return; }
-    const key=`${d.owner}|${ym.year}|${ym.month}`;
-    const exists=await exdbGet(key);
-    if(exists && !confirm(`${d.owner} の ${ym.year}年${ym.month}月分は既に蓄積済みです。上書きしますか?`)) return;
-    await exdbPut(key,{ owner:d.owner, year:ym.year, month:ym.month, kind:'month', b64, savedAt:new Date().toISOString() });
-    toast(`${d.owner} ${ym.year}年${ym.month}月分をPIVOTに蓄積しました`);
+    await sophiaGasCall({ action:'save', owner:d.owner, year:ym.year, month:ym.month, kind:'month', b64 });
+    toast(`${d.owner} ${ym.year}年${ym.month}月分を共用Driveに保存しました`);
     renderPreview();
-  }catch(e){ console.error(e); toast('蓄積に失敗しました: '+e.message); }
+  }catch(e){ console.error(e); toast('保存に失敗: '+e.message); }
 }
-// 年間収支表を蓄積(除外オーナーに年間収支表が紐づいているとき)
+// 年間収支表を共用Driveへ蓄積
 async function accumulateOwnerYear(i){
   const d=detail[i];
-  const b64=await makeYearPdfBase64(d.owner);
-  if(!b64){ toast('この明細に年間収支表が見つかりません'); return; }
-  // 年は「取り込んでいる月次の年」を優先。無ければ今年
-  let year=(parseYM((d.props[0]&&d.props[0].month)||'')||{}).year || String(new Date().getFullYear());
   try{
-    const key=`${d.owner}|${year}|YEAR`;
-    const exists=await exdbGet(key);
-    if(exists && !confirm(`${d.owner} の ${year}年 年間収支表は既に蓄積済みです。上書きしますか?`)) return;
-    await exdbPut(key,{ owner:d.owner, year, month:'YEAR', kind:'year', b64, savedAt:new Date().toISOString() });
-    toast(`${d.owner} ${year}年 年間収支表をPIVOTに蓄積しました`);
+    const b64=await makeYearPdfBase64(d.owner);
+    if(!b64){ toast('この明細に年間収支表が見つかりません'); return; }
+    let year=(parseYM((d.props[0]&&d.props[0].month)||'')||{}).year || String(new Date().getFullYear());
+    toast('共用Driveへ保存中…');
+    await sophiaGasCall({ action:'save', owner:d.owner, year, month:'YEAR', kind:'year', b64 });
+    toast(`${d.owner} ${year}年 年間収支表を共用Driveに保存しました`);
     renderPreview();
-  }catch(e){ console.error(e); toast('年間収支表の蓄積に失敗しました: '+e.message); }
+  }catch(e){ console.error(e); toast('年間収支表の保存に失敗: '+e.message); }
 }
-// あるオーナーの蓄積状況を年ごとに集計 → {year:{months:Set, hasYear:bool}}
+// あるオーナーの蓄積状況を年ごとに集計(共用Driveから) → {year:{months:Set, hasYear:bool}}
 async function loadExAccum(ownerName){
-  const keys=await exdbAllKeys();
   const byYear={};
-  keys.forEach(k=>{
-    const parts=String(k).split('|');
-    if(parts.length!==3) return;
-    let [own,year,mm]=parts;
-    if(own!==ownerName) return;
-    // 月は2桁に正規化（旧「6」と新「06」を同一視して緑表示のズレを防ぐ）
-    if(mm!=='YEAR' && /^\d{1,2}$/.test(mm)) mm=String(parseInt(mm,10)).padStart(2,'0');
-    (byYear[year]=byYear[year]||{months:new Set(),hasYear:false});
-    if(mm==='YEAR') byYear[year].hasYear=true; else byYear[year].months.add(mm);
-  });
+  if(!getSophiaGasUrl()) return byYear;
+  try{
+    const data=await sophiaGasCall({ action:'list', owner:ownerName });
+    const years=data.years||{};
+    Object.keys(years).forEach(y=>{
+      const info=years[y];
+      const set=new Set((info.months||[]).map(mm=>String(parseInt(mm,10)).padStart(2,'0')));
+      byYear[y]={ months:set, hasYear:!!info.hasYear };
+    });
+  }catch(e){ console.warn('list失敗:',e.message); }
   return byYear;
 }
-// 旧バージョンで「年|6」のように1桁で保存されたキーを「年|06」に一度だけ直す
-async function migrateExAccumKeys(){
-  try{
-    if(localStorage.getItem('rent_exaccum_migrated_v1')) return;
-    const keys=await exdbAllKeys();
-    for(const k of keys){
-      const parts=String(k).split('|');
-      if(parts.length!==3) continue;
-      const [own,year,mm]=parts;
-      if(mm==='YEAR' || !/^\d{1,2}$/.test(mm)) continue;
-      const mm2=String(parseInt(mm,10)).padStart(2,'0');
-      if(mm2===mm) continue; // 既に2桁
-      const newKey=`${own}|${year}|${mm2}`;
-      const rec=await exdbGet(k);
-      if(rec){ rec.month=mm2; await exdbPut(newKey,rec); await exdbDelete(k); }
-    }
-    localStorage.setItem('rent_exaccum_migrated_v1','1');
-  }catch(e){ console.warn('exaccum migrate:',e); }
-}
-// 除外オーナーの、ある年の 1〜12月＋年間 を1つのPDFに結合してダウンロード
+// 除外オーナーの、ある年の 1〜12月＋年間 を1つのPDFに結合してダウンロード(共用Driveから取得)
 async function mergeYearForOwner(ownerName,year){
   try{
+    toast('共用Driveから取得中…');
+    const data=await sophiaGasCall({ action:'merge', owner:ownerName, year });
+    const items=data.items||[];
+    if(!items.length){ toast('この年の蓄積データがありません'); return; }
     const out=await PDFLib.PDFDocument.create();
-    let added=0;
-    for(let m=1;m<=12;m++){
-      const mm=String(m).padStart(2,'0');
-      let rec=await exdbGet(`${ownerName}|${year}|${mm}`);
-      if(!(rec && rec.b64)){ rec=await exdbGet(`${ownerName}|${year}|${m}`); } // 旧1桁キーの保険
-      if(rec && rec.b64){
-        const src=await PDFLib.PDFDocument.load(_b64ToBytes(rec.b64));
-        const pages=await out.copyPages(src,src.getPageIndices());
-        pages.forEach(p=>out.addPage(p)); added++;
-      }
-    }
-    const yearRec=await exdbGet(`${ownerName}|${year}|YEAR`);
-    if(yearRec && yearRec.b64){
-      const src=await PDFLib.PDFDocument.load(_b64ToBytes(yearRec.b64));
+    for(const it of items){
+      if(!it.b64) continue;
+      const src=await PDFLib.PDFDocument.load(_b64ToBytes(it.b64));
       const pages=await out.copyPages(src,src.getPageIndices());
-      pages.forEach(p=>out.addPage(p)); added++;
+      pages.forEach(p=>out.addPage(p));
     }
-    if(!added){ toast('この年の蓄積データがありません'); return; }
     const bytes=await out.save();
     const blob=new Blob([bytes],{type:'application/pdf'});
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
     a.download=`${ownerName}_${year}年_年間まとめ.pdf`.replace(/\s/g,'');
     a.click();
-    toast(`${ownerName} ${year}年分(${added}件)を1つのPDFにまとめました`);
-  }catch(e){ console.error(e); toast('まとめPDFの作成に失敗しました: '+e.message); }
+    toast(`${ownerName} ${year}年分(${items.length}件)を1つのPDFにまとめました`);
+  }catch(e){ console.error(e); toast('まとめPDFの作成に失敗: '+e.message); }
 }
 function _b64ToBytes(b64){
   const bin=atob(b64); const arr=new Uint8Array(bin.length);
@@ -9777,30 +9755,24 @@ function _b64ToBytes(b64){
 // 12/20以降かどうか(年末自動まとめの解禁判定)
 function isYearEndOpen(){
   const now=new Date();
-  return (now.getMonth()===11 && now.getDate()>=20); // 12月=month11
+  return (now.getMonth()===11 && now.getDate()>=20);
 }
-// 蓄積済みの1件を削除
+// 蓄積済みの1件を削除(共用Drive)
 async function deleteExAccum(ownerName,year,mm){
   const label=mm==='YEAR'?`${year}年 年間収支表`:`${year}年${mm}月分`;
-  if(!confirm(`${ownerName} の ${label} を蓄積から削除しますか?`)) return;
-  await exdbDelete(`${ownerName}|${year}|${mm}`);
-  // 旧1桁キーの保険も消す
-  if(mm!=='YEAR'){ await exdbDelete(`${ownerName}|${year}|${parseInt(mm,10)}`); }
-  toast('削除しました');
-  renderPreview();
+  if(!confirm(`${ownerName} の ${label} を共用Driveから削除しますか?`)) return;
+  try{
+    await sophiaGasCall({ action:'delete', owner:ownerName, year, month:mm, kind:(mm==='YEAR'?'year':'month') });
+    toast('削除しました'); renderPreview();
+  }catch(e){ console.error(e); toast('削除に失敗: '+e.message); }
 }
-// ある年の蓄積を一括削除（前年不要になったとき用）
+// ある年の蓄積を一括削除(共用Drive)
 async function deleteExYear(ownerName,year){
-  if(!confirm(`${ownerName} の ${year}年分（月次・年間すべて）を蓄積から削除します。\nまとめPDFを書き出し済みか確認してください。よろしいですか?`)) return;
-  const keys=await exdbAllKeys();
-  let n=0;
-  for(const k of keys){
-    const parts=String(k).split('|');
-    if(parts.length!==3) continue;
-    if(parts[0]===ownerName && parts[1]===year){ await exdbDelete(k); n++; }
-  }
-  toast(`${year}年分 ${n}件を削除しました`);
-  renderPreview();
+  if(!confirm(`${ownerName} の ${year}年分（月次・年間すべて）を共用Driveから削除します。\nまとめPDFを書き出し済みか確認してください。よろしいですか?`)) return;
+  try{
+    const data=await sophiaGasCall({ action:'deleteYear', owner:ownerName, year });
+    toast(`${year}年分 ${data.deleted||0}件を削除しました`); renderPreview();
+  }catch(e){ console.error(e); toast('削除に失敗: '+e.message); }
 }
 // 除外オーナーカード内に「年ごとの蓄積状況」HTMLを組み立てて差し込む(非同期)
 async function renderExAccumInto(containerId,ownerName){
@@ -9864,7 +9836,7 @@ function activate(){
 }
 
 
-window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, removeFromList, renderHistory, clearHistory, checkBounces, accumulateOwnerMonth, accumulateOwnerYear, mergeYearForOwner, deleteExAccum, deleteExYear };
+window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, removeFromList, renderHistory, clearHistory, checkBounces, accumulateOwnerMonth, accumulateOwnerYear, mergeYearForOwner, deleteExAccum, deleteExYear, saveSophiaGasUrl };
 })();
 </script>
 <script>
