@@ -9278,7 +9278,10 @@ function renderPreview(){
         const propTxt=d.props.map(p=>esc(p.property||p.bldNo)).join(" / ");
         const pdfReady=!!pdfDoc;
         const monthStr=(d.props[0]&&d.props[0].month)||"";
+        const _ym=parseYM(monthStr);
+        const monthLabel=_ym?`${_ym.year}年${parseInt(_ym.month,10)}月分`:(monthStr||'対象月不明');
         const accumId="exaccum-"+i;
+        const monthStatId="exmonthstat-"+i;
         return `<div class="pv-item" style="border-left:4px solid #c8a96b;margin-bottom:10px;">
           <div class="pv-head" style="cursor:default;">
             <span class="nm">${esc(d.owner)}</span>
@@ -9288,21 +9291,25 @@ function renderPreview(){
           </div>
           <div class="pv-body open" style="padding:10px 12px;">
             <div class="pv-meta">対象物件: <b>${propTxt||'—'}</b>　|　メール送信は行いません</div>
+            ${pdfReady?`<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#eef4fb;border:1px solid #cfe0f3;font-size:.82rem;">
+              <b style="color:#1565c0;">📥 いま取り込んでいる明細：${esc(monthLabel)}</b>
+              <span id="${monthStatId}" style="margin-left:8px;font-weight:700;color:var(--rt-muted);">蓄積状況を確認中…</span>
+            </div>`:''}
             <div class="pv-actions" style="margin-top:8px;">
               <button class="btn btn-sm btn-acc" onclick="RENT.previewOwnerPdf(${i})" ${pdfReady?'':'disabled'}>👁 明細を確認</button>
-              <button class="btn btn-sm" onclick="RENT.accumulateOwnerMonth(${i})" ${pdfReady?'':'disabled'} style="background:#2c6e49;color:#fff;border-color:#2c6e49;">➕ この月をPIVOTに蓄積</button>
+              <button class="btn btn-sm" onclick="RENT.accumulateOwnerMonth(${i})" ${pdfReady?'':'disabled'} style="background:#1565c0;color:#fff;border-color:#1565c0;">➕ ${pdfReady?esc(monthLabel):'この月'}を蓄積</button>
               <button class="btn btn-sm" onclick="RENT.accumulateOwnerYear(${i})" style="background:#8a6d2f;color:#fff;border-color:#8a6d2f;">📊 年間収支表を蓄積</button>
               <button class="btn btn-sm" onclick="RENT.downloadOwnerPdf(${i})" ${pdfReady?'':'disabled'}>💾 この月をPCに保存</button>
             </div>
             ${pdfReady?'':'<div style="font-size:.76rem;color:var(--warn);font-weight:700;margin-top:6px;">※ 蓄積・保存するには上の枠に明細PDFを取り込んでください。</div>'}
-            <div style="margin-top:10px;font-size:.78rem;font-weight:800;color:#8a6d2f;">📚 PIVOTに蓄積済みの明細（年ごと）</div>
+            <div style="margin-top:10px;font-size:.78rem;font-weight:800;color:#8a6d2f;">📚 共用Driveに蓄積済みの明細（年ごと）</div>
             <div id="${accumId}" style="margin-top:4px;"><div style="font-size:.76rem;color:var(--rt-muted);">読み込み中…</div></div>
             <div class="pdf-preview" id="pdfprev-${i}"></div>
           </div>
         </div>`;
       }).join("");
-      // 旧1桁キーを一度だけ2桁へ正規化してから各オーナーの蓄積状況を描画
-      (async()=>{ excludedIdx.forEach(i=>{ try{ renderExAccumInto("exaccum-"+i, detail[i].owner); }catch(e){} }); })();
+      // 各オーナーの蓄積状況を描画（共用Driveから）＋いま取込中の月が蓄積済みか判定
+      (async()=>{ for(const i of excludedIdx){ try{ await renderExAccumInto("exaccum-"+i, detail[i].owner, i); }catch(e){} } })();
       // 12/20以降なら年末自動まとめを一度だけ実行
       try{ autoYearEndMergeIfDue(); }catch(e){}
     }else{
@@ -9775,10 +9782,22 @@ async function deleteExYear(ownerName,year){
   }catch(e){ console.error(e); toast('削除に失敗: '+e.message); }
 }
 // 除外オーナーカード内に「年ごとの蓄積状況」HTMLを組み立てて差し込む(非同期)
-async function renderExAccumInto(containerId,ownerName){
+async function renderExAccumInto(containerId,ownerName,cardIdx){
   const el=document.getElementById(containerId);
   if(!el) return;
   const byYear=await loadExAccum(ownerName);
+  // いま取り込んでいる月が蓄積済みかを、同じ集計結果から判定して表示
+  if(cardIdx!==undefined){
+    const stat=document.getElementById("exmonthstat-"+cardIdx);
+    const d=detail[cardIdx];
+    const ym=d&&parseYM((d.props[0]&&d.props[0].month)||'');
+    if(stat && ym){
+      const info=byYear[ym.year];
+      const done=info && info.months && info.months.has(ym.month);
+      if(done){ stat.textContent='✓ この月は蓄積済み'; stat.style.color='#1565c0'; }
+      else{ stat.textContent='● 未蓄積（まだ保存されていません）'; stat.style.color='#c0392b'; }
+    }else if(stat){ stat.textContent=''; }
+  }
   const years=Object.keys(byYear).sort((a,b)=>b.localeCompare(a));
   if(!years.length){ el.innerHTML='<div style="font-size:.76rem;color:var(--rt-muted);">まだ蓄積された明細はありません。</div>'; return; }
   const yearEnd=isYearEndOpen();
