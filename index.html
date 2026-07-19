@@ -781,6 +781,95 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #kb-view .stat-pill.accent:hover .num { color: #b98cff; }
   #kb-view .stat-pill.almost:hover .num { color: #5fe08a; }
 
+  #kb-view .broker-stat-bar { padding: 4px 24px 8px; }
+  #kb-view .broker-stat-btn {
+    background: #fff; color: #111; font-size: 14px; font-weight: 800; letter-spacing: .2px;
+    padding: 11px 22px; border-radius: 12px; cursor: pointer; font-family: inherit;
+    border: 1.5px solid #ececef; box-shadow: 0 1px 3px rgba(0,0,0,0.10);
+    transition: transform .14s ease, box-shadow .14s ease, background .14s ease, border-color .14s ease, color .14s ease;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  #kb-view .broker-stat-btn:hover {
+    background: #111; border-color: #111; color: #fff; transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+  }
+  #kb-view .broker-stat-btn:active { transform: translateY(-1px); }
+  #kb-view .broker-stat-btn .bs-ico { font-size: 17px; }
+  /* ===== 客付業者ランキング(モノクロ・ホバー系) ===== */
+  #bstat-modal.done-modal { max-width: 720px; }
+  #bstat-modal .done-head { background: #fff; border-bottom: 1.5px solid #ececef; }
+  #bstat-modal .done-head h2 { color: #111; font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
+  #bstat-body { background: #fafafa; }
+
+  #bstat-body .bstat-summary { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 2px 16px; }
+  #bstat-body .bstat-chip {
+    background: #fff; border: 1.5px solid #ececef; border-radius: 999px; padding: 7px 15px;
+    font-size: 13px; font-weight: 700; color: #444; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  #bstat-body .bstat-chip b { font-size: 15px; color: #111; font-weight: 800; }
+
+  #bstat-body .bstat-card {
+    background: #fff; border: 1.5px solid #ececef; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08); position: relative; overflow: hidden;
+    transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+  }
+  #bstat-body .bstat-card:hover {
+    transform: translateY(-3px); border-color: #111; box-shadow: 0 8px 22px rgba(0,0,0,0.16);
+  }
+  #bstat-body .bstat-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: #ececef;
+    transition: background .14s ease;
+  }
+  #bstat-body .bstat-card:hover::before { background: #111; }
+  /* 上位3位だけ左帯を濃く(モノクロ濃淡) */
+  #bstat-body .bstat-card.rk1::before { background: #111; }
+  #bstat-body .bstat-card.rk2::before { background: #888; }
+  #bstat-body .bstat-card.rk3::before { background: #bbb; }
+
+  #bstat-body .bstat-top { display: flex; align-items: center; gap: 13px; margin-bottom: 4px; }
+  #bstat-body .bstat-medal {
+    flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 900;
+    background: #f4f4f6; color: #111; border: 1.5px solid #ececef;
+    transition: background .14s ease, color .14s ease, border-color .14s ease;
+  }
+  #bstat-body .bstat-card:hover .bstat-medal { background: #111; color: #fff; border-color: #111; }
+  #bstat-body .bstat-card.rk1 .bstat-medal { background: #111; color: #fff; border-color: #111; }
+  #bstat-body .bstat-card.rk2 .bstat-medal { background: #666; color: #fff; border-color: #666; }
+  #bstat-body .bstat-card.rk3 .bstat-medal { background: #aaa; color: #fff; border-color: #aaa; }
+  /* メダル絵文字は色反転しないので上位はそのまま。番号順位のみ反転対象 */
+  #bstat-body .bstat-name { flex: 1 1 auto; font-size: 16px; font-weight: 800; color: #111; line-height: 1.3; word-break: break-word; letter-spacing: -0.2px; }
+  #bstat-body .bstat-badge {
+    flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 60px; padding: 6px 12px; border-radius: 12px;
+    background: #111; color: #fff; transition: transform .14s ease;
+  }
+  #bstat-body .bstat-card:hover .bstat-badge { transform: scale(1.05); }
+  #bstat-body .bstat-badge .bnum { font-size: 22px; font-weight: 900; line-height: 1; letter-spacing: -0.5px; }
+  #bstat-body .bstat-badge .blbl { font-size: 10px; font-weight: 700; opacity: .85; margin-top: 2px; }
+
+  #bstat-body .bstat-props { display: flex; flex-direction: column; gap: 5px; padding-left: 57px; margin-top: 8px; }
+  #bstat-body .bstat-prop-row {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: #f7f7f8; border-radius: 10px; padding: 8px 12px; font-size: 13px;
+    transition: background .14s ease;
+  }
+  #bstat-body .bstat-card:hover .bstat-prop-row { background: #f0f0f2; }
+  #bstat-body .bstat-prop-row .pdot { color: #bbb; font-size: 12px; }
+  #bstat-body .bstat-prop-row .pname { font-weight: 800; color: #222; }
+  #bstat-body .bstat-prop-row .pstaff { font-size: 11px; font-weight: 800; color: #444; background: #e8e8ea; padding: 2px 9px; border-radius: 999px; }
+  #bstat-body .bstat-prop-row .pwhen { margin-left: auto; font-size: 12px; font-weight: 700; color: #9a9a9f; }
+  #bstat-body .bstat-empty {
+    padding: 50px 24px; text-align: center; color: #8a8a8f; font-size: 15px; line-height: 1.7;
+    background: #fff; border: 1.5px solid #ececef; border-radius: 14px;
+  }
+  #bstat-body .bstat-empty .be-ico { font-size: 38px; display: block; margin-bottom: 12px; filter: grayscale(1); }
+
+  @media (max-width: 640px){
+    #bstat-body .bstat-props { padding-left: 0; }
+    #bstat-body .bstat-name { font-size: 15px; }
+  }
+
   #kb-view .hint {
     margin: 0 24px 8px; font-size: 11px; color: var(--text-3);
     display: flex; align-items: center; gap: 6px;
@@ -1805,6 +1894,9 @@ body.tab-kanban .kb-toolbar { display:flex; }
 <div id="kb-view">
 
 <div class="stats-bar" id="stats-bar"></div>
+<div class="broker-stat-bar">
+  <button class="broker-stat-btn" onclick="KB.openBrokerStats()"><span class="bs-ico">📊</span>客付業者ランキング</button>
+</div>
 <div class="hint">💡 契約をアイコンで一覧表示しています。アイコンにカーソルを合わせると編集画面が開きます。進捗バーで現在のステージがわかります。</div>
 
 <div class="board-wrap">
@@ -1905,6 +1997,22 @@ body.tab-kanban .kb-toolbar { display:flex; }
     </div>
   </div>
   <div class="done-body" id="done-body"></div>
+</div>
+
+<div class="done-backdrop" id="bstat-backdrop"></div>
+<div class="done-modal" id="bstat-modal" role="dialog" aria-hidden="true">
+  <div class="done-head">
+    <h2>📊 客付業者 統計</h2>
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <input type="text" id="bstat-year" inputmode="numeric" maxlength="4" placeholder="年 例)2026"
+        oninput="KB.renderBrokerStats()" title="契約日の年で絞り込み。空欄で全期間"
+        style="width:100px; border:1px solid #d9d4c7; background:#fff; color:#333; font-size:13px; font-weight:700; padding:7px 12px; border-radius:999px; font-family:inherit; text-align:center;">
+      <button id="bstat-csv" onclick="KB.exportBrokerStatsCsv()" title="統計をCSV出力"
+        style="border:none; background:#e6efe7; color:#3f6b4c; font-size:13px; font-weight:800; padding:8px 14px; border-radius:999px; cursor:pointer; font-family:inherit; white-space:nowrap;">⬇ CSV出力</button>
+      <button class="pv-close" onclick="KB.closeBrokerStats()">×</button>
+    </div>
+  </div>
+  <div class="done-body" id="bstat-body"></div>
 </div>
 </div><!-- /#kb-view -->
 
@@ -10861,6 +10969,115 @@ function closeDoneModal(){
   m.classList.remove('active');
   m.setAttribute('aria-hidden','true');
 }
+
+// ====== 客付業者 統計 ======
+function openBrokerStats(){
+  renderBrokerStats();
+  document.getElementById('bstat-backdrop').classList.add('active');
+  const m = document.getElementById('bstat-modal');
+  m.classList.add('active');
+  m.setAttribute('aria-hidden','false');
+}
+function closeBrokerStats(){
+  document.getElementById('bstat-backdrop').classList.remove('active');
+  const m = document.getElementById('bstat-modal');
+  m.classList.remove('active');
+  m.setAttribute('aria-hidden','true');
+}
+// 契約の「客付時期」を取り出す(契約日→なければ申込日)。表示用 & 年フィルタ用の両方を返す
+function brokerWhen(c){
+  const raw = (c.contractDate || c.applyDate || '');
+  const m = String(raw).match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);
+  if(m){ return { year:m[1], disp:m[1]+'/'+m[2].padStart(2,'0')+'/'+m[3].padStart(2,'0'), sort:m[1]+m[2].padStart(2,'0')+m[3].padStart(2,'0') }; }
+  const m2 = String(raw).match(/(\d{4})\D+(\d{1,2})/);
+  if(m2){ return { year:m2[1], disp:m2[1]+'/'+m2[2].padStart(2,'0'), sort:m2[1]+m2[2].padStart(2,'0')+'00' }; }
+  return { year:'', disp:'時期不明', sort:'00000000' };
+}
+// 統計データを集計して返す(業者ごと)。archived含む全契約対象
+function computeBrokerStats(){
+  const list = Object.values(loadAll());
+  const yearInput = document.getElementById('bstat-year');
+  const fy = yearInput ? String(yearInput.value||'').trim() : '';
+  const fyValid = /^\d{4}$/.test(fy);
+  const map = {}; // brokerName -> {broker, count, items:[]}
+  list.forEach(c => {
+    const broker = (c.broker || '').trim();
+    if(!broker) return; // 客付業者未入力はカウント外
+    const w = brokerWhen(c);
+    if(fyValid && w.year !== fy) return;
+    if(!map[broker]) map[broker] = { broker, count:0, items:[] };
+    map[broker].count++;
+    const roomNo = c.room ? String(c.room).replace(/^P/i,'') : '';
+    map[broker].items.push({
+      property: (c.property||'(物件未入力)') + (roomNo ? ' '+roomNo+'号' : ''),
+      staff: (c.staff||'').trim(),
+      when: w.disp, sort: w.sort
+    });
+  });
+  const rows = Object.values(map);
+  rows.forEach(r => r.items.sort((a,b)=>b.sort.localeCompare(a.sort))); // 新しい客付順
+  rows.sort((a,b)=> b.count - a.count || a.broker.localeCompare(b.broker,'ja')); // 件数多い順
+  return { rows, fyValid, fy, total: rows.reduce((s,r)=>s+r.count,0) };
+}
+function renderBrokerStats(){
+  const { rows, fyValid, fy, total } = computeBrokerStats();
+  const body = document.getElementById('bstat-body');
+  if(rows.length === 0){
+    body.innerHTML = '<div class="bstat-empty"><span class="be-ico">🏢</span>' +
+      (fyValid ? (fy + '年に客付業者が入力された契約はありません。')
+               : '客付業者(仲介業者)が入力された契約がありません。<br>契約カードの「仲介・担当」に業者名を入れると集計されます。') +
+      '</div>';
+    return;
+  }
+  const period = fyValid ? (fy + '年') : '全期間';
+  let html = '<div class="bstat-summary">' +
+    '<div class="bstat-chip">📅 ' + esc(period) + '</div>' +
+    '<div class="bstat-chip">🏢 業者 <b>' + rows.length + '</b> 社</div>' +
+    '<div class="bstat-chip">✍️ 客付 <b>' + total + '</b> 件</div>' +
+    '</div>';
+  rows.forEach((r, i) => {
+    const rankCls = i < 3 ? ' rk' + (i+1) : '';
+    const medal = (i+1);
+    const props = r.items.map(it =>
+      '<div class="bstat-prop-row">' +
+        '<span class="pdot">●</span>' +
+        '<span class="pname">' + esc(it.property) + '</span>' +
+        (it.staff ? '<span class="pstaff">' + esc(it.staff) + '</span>' : '') +
+        '<span class="pwhen">' + esc(it.when) + '</span>' +
+      '</div>'
+    ).join('');
+    html += '<div class="bstat-card' + rankCls + '">' +
+      '<div class="bstat-top">' +
+        '<div class="bstat-medal">' + medal + '</div>' +
+        '<div class="bstat-name">' + esc(r.broker) + '</div>' +
+        '<div class="bstat-badge"><span class="bnum">' + r.count + '</span><span class="blbl">件</span></div>' +
+      '</div>' +
+      '<div class="bstat-props">' + props + '</div>' +
+    '</div>';
+  });
+  body.innerHTML = html;
+}
+function exportBrokerStatsCsv(){
+  const { rows, fyValid, fy } = computeBrokerStats();
+  if(rows.length === 0){ alert('出力できる統計データがありません。'); return; }
+  const header = ['順位','客付業者','客付件数','物件名','担当者','客付時期'];
+  const lines = [header];
+  rows.forEach((r, i) => {
+    r.items.forEach((it, j) => {
+      lines.push([ j===0 ? String(i+1) : '', j===0 ? r.broker : '', j===0 ? String(r.count) : '',
+                   it.property, it.staff, it.when ]);
+    });
+  });
+  const csv = lines.map(row => row.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\r\n');
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '客付業者統計_' + (fyValid ? fy+'年' : '全期間') + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
 // 日付文字列(YYYY-MM-DD…)から日本の年度を求める。4月始まり〜翌3月。
 // 例: 2026-03-31 → 2025(年度) / 2026-04-01 → 2026(年度)
 function fiscalYearOf(dateStr){
@@ -12319,8 +12536,9 @@ renderAll();
 // プレビュー: バックドロップのクリックで閉じる
 document.getElementById('preview-backdrop').addEventListener('click', () => hidePreview());
 document.getElementById('done-backdrop').addEventListener('click', () => closeDoneModal());
+document.getElementById('bstat-backdrop').addEventListener('click', () => closeBrokerStats());
 // Escで閉じる
-document.addEventListener('keydown', (e) => { if(e.key === 'Escape'){ hidePreview(); closeDoneModal(); } });
+document.addEventListener('keydown', (e) => { if(e.key === 'Escape'){ hidePreview(); closeDoneModal(); closeBrokerStats(); } });
 
 // 編集シートからカーソルが外れたら閉じる(PCのみ・少し待って誤作動防止・戻れば取消)
 let _sheetLeaveTimer = null;
@@ -12394,6 +12612,10 @@ try{window.KB.onContractDateChange=onContractDateChange;}catch(e){}
 try{window.KB.onDefectFilter=onDefectFilter;}catch(e){}
 try{window.KB.onParkingTap=onParkingTap;}catch(e){}
 try{window.KB.openDoneModal=openDoneModal;}catch(e){}
+try{window.KB.openBrokerStats=openBrokerStats;}catch(e){}
+try{window.KB.closeBrokerStats=closeBrokerStats;}catch(e){}
+try{window.KB.renderBrokerStats=renderBrokerStats;}catch(e){}
+try{window.KB.exportBrokerStatsCsv=exportBrokerStatsCsv;}catch(e){}
 try{window.KB.openFromDone=openFromDone;}catch(e){}
 try{window.KB.openInfoEdit=openInfoEdit;}catch(e){}
 try{window.KB.openSheet=openSheet;}catch(e){}
