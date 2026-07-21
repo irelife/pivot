@@ -1946,6 +1946,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
       <button onclick="closeSettingsMenu();runAutoSwitch(true)">自動切替</button>
       <button onclick="closeSettingsMenu();downloadBackup()">バックアップ</button>
       <button onclick="closeSettingsMenu();document.getElementById('restoreFile').click()">復元</button>
+      <button onclick="closeSettingsMenu();restoreEmergencyBackup()" style="color:#c0392b">🆘 緊急復元(直前に戻す)</button>
       <button onclick="closeSettingsMenu();openImgDiagModal()">画像チェック</button>
       <div class="settings-menu-sep"></div>
       <button onclick="closeSettingsMenu();openCsvImportModal()" class="settings-menu-primary">CSV一括インポート</button>
@@ -3366,6 +3367,20 @@ async function autoPullOnStart(){
   const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
   if(!url) return;
   if(_hasUnsavedChanges || _autoPushInFlight){ return; }
+  // ===== 起動時の自動退避 =====
+  // 取り込みで万一上書きされても戻せるよう、現在のローカルを緊急バックアップとして残す。
+  try{
+    const snap = {
+      at: new Date().toISOString(),
+      buildings: localStorage.getItem(STORAGE_KEY) || '{}',
+      contracts: localStorage.getItem('contract_kanban_v2') || '{}',
+      kintai: localStorage.getItem('pivot_kintai_v1') || '{}',
+    };
+    // 契約か物件が入っているときだけ退避（空を退避して上書きしない）
+    const hasC = Object.keys(JSON.parse(snap.contracts)).length > 0;
+    const hasB = Object.keys(JSON.parse(snap.buildings)).length > 0;
+    if(hasC || hasB){ localStorage.setItem('pivot_emergency_backup', JSON.stringify(snap)); }
+  }catch(e){ /* 退避失敗しても本処理は続行 */ }
   setSyncStatus('loading', '☁️ 確認中…');
   try{
     const r = await postToGas(url, { action:'load' });
@@ -3384,10 +3399,33 @@ async function autoPullOnStart(){
         (Object.keys((function(){try{return JSON.parse(localStorage.getItem('pivot_kintai_v1')||'{}');}catch(e){return {};}})()).length > 0);
       const shouldPull = (!localHasData) || (cloudMtime > localMtime);
       if(shouldPull){
-        if(buildings && Object.keys(buildings).length >= 0){
+        // ===== 物件データ保護ガード（取り込み時）=====
+        let localBuildings = {};
+        try{ localBuildings = loadAll() || {}; }catch(e){ localBuildings = {}; }
+        const localBC = Object.keys(localBuildings).length;
+        const cloudBC = Object.keys(buildings || {}).length;
+        if(localBC >= 3 && cloudBC < localBC * 0.5){
+          // クラウドの物件が異常に少ない → 物件は取り込まず手元を守り、手元をクラウドへ送る
+          setSyncStatus('error', '⚠️ 物件データを保護しました');
+          scheduleAutoPush();
+        } else if(buildings && Object.keys(buildings).length >= 0){
           localStorage.setItem(STORAGE_KEY, JSON.stringify(buildings));
         }
-        localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts || {}));
+        // ===== 契約データ保護ガード（取り込み時）=====
+        // クラウドの契約がローカルより大幅に少ない/空なら、ローカルの契約を消さない。
+        // (クラウド側が空・古い状態で起動したときに、手元の正しい契約を上書き消失する事故を防ぐ)
+        let localContracts = {};
+        try{ localContracts = JSON.parse(localStorage.getItem('contract_kanban_v2') || '{}'); }catch(e){ localContracts = {}; }
+        const localCC = Object.keys(localContracts).length;
+        const cloudCC = Object.keys(contracts || {}).length;
+        if(localCC >= 3 && cloudCC < localCC * 0.5){
+          // クラウド側が異常に少ない → 契約は取り込まず、手元を守る。手元をクラウドへ送って復旧。
+          setSyncStatus('error', '⚠️ 契約データを保護しました');
+          alert('クラウドの契約数('+cloudCC+'件)が、この端末('+localCC+'件)より大幅に少なかったため、\n手元の契約データを保護し、クラウドの内容では上書きしませんでした。\n\nこの端末の契約をクラウドへ送って復旧します。');
+          scheduleAutoPush();
+        } else {
+          localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts || {}));
+        }
         {
           // 勤怠は上書きせず、ローカルとクラウドを日付単位でマージ(複数端末で消えない)
           applyCloudKintai(kintai);
@@ -7145,22 +7183,49 @@ function downloadBackup(){
   const all = loadAll();
   let kintai = {};
   try{ kintai = JSON.parse(localStorage.getItem('pivot_kintai_v1') || '{}'); }catch(e){}
+  let contracts = {};
+  try{ contracts = JSON.parse(localStorage.getItem('contract_kanban_v2') || '{}'); }catch(e){}
+  let owners = [];
+  try{ owners = JSON.parse(localStorage.getItem('rent_owner_send_owners_v1') || '[]'); }catch(e){}
   const data = {
-    version: '1.0',
+    version: '1.1',
     exportedAt: new Date().toISOString(),
     buildings: all,
-    kintai: kintai
+    contracts: contracts,   // ★契約も含める（Contractタブのカード）
+    kintai: kintai,
+    owners: owners
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   const dt = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-  a.download = 'PIVOT_simple_backup_' + dt + '.json';
+  a.download = 'PIVOT_backup_' + dt + '.json';
   a.click();
   URL.revokeObjectURL(url);
-  showToast('💾 バックアップをダウンロードしました');
+  showToast('💾 バックアップをダウンロードしました（物件・契約・勤怠）');
 }
+
+// 緊急復元：起動時の自動退避（pivot_emergency_backup）から、直前の状態に戻す
+function restoreEmergencyBackup(){
+  let snap = null;
+  try{ snap = JSON.parse(localStorage.getItem('pivot_emergency_backup') || 'null'); }catch(e){ snap = null; }
+  if(!snap){ alert('緊急バックアップが見つかりませんでした。'); return; }
+  let bc=0, cc=0;
+  try{ bc = Object.keys(JSON.parse(snap.buildings||'{}')).length; }catch(e){}
+  try{ cc = Object.keys(JSON.parse(snap.contracts||'{}')).length; }catch(e){}
+  const when = snap.at ? new Date(snap.at).toLocaleString('ja-JP') : '不明';
+  if(!confirm('起動直前の状態に戻します。\n\n退避時刻: '+when+'\n物件: '+bc+'件 ／ 契約: '+cc+'件\n\n現在のデータは、この退避内容で上書きされます。よろしいですか？')) return;
+  try{
+    if(snap.buildings) localStorage.setItem(STORAGE_KEY, snap.buildings);
+    if(snap.contracts) localStorage.setItem('contract_kanban_v2', snap.contracts);
+    if(snap.kintai)    localStorage.setItem('pivot_kintai_v1', snap.kintai);
+    alert('復元しました。ページを再読み込みします。');
+    location.reload();
+  }catch(e){ alert('復元中にエラーが発生しました: '+e); }
+}
+try{ if(typeof window!=='undefined'){ window.restoreEmergencyBackup = restoreEmergencyBackup; } }catch(e){}
+
 function restoreBackup(event){
   const file = event.target.files[0];
   if(!file) return;
@@ -7173,15 +7238,21 @@ function restoreBackup(event){
         return;
       }
       const count = Object.keys(data.buildings).length;
-      if(!confirm('バックアップから ' + count + ' 件の物件を復元します。\n現在のデータは上書きされます。\n本当に復元しますか?')){
+      const ccount = data.contracts ? Object.keys(data.contracts).length : 0;
+      if(!confirm('バックアップから物件 ' + count + ' 件' + (ccount?('・契約 '+ccount+' 件'):'') + ' を復元します。\nこの端末の現在データは上書きされます。\n本当に復元しますか?')){
         return;
       }
       if(saveAll(data.buildings)){
+        if(data.contracts && typeof data.contracts === 'object'){
+          try{ localStorage.setItem('contract_kanban_v2', JSON.stringify(data.contracts)); }catch(e){}
+          try{ if(window.KB && window.KB.renderAll) window.KB.renderAll(); }catch(e){}
+        }
         if(data.kintai && typeof data.kintai === 'object'){
           try{ localStorage.setItem('pivot_kintai_v1', JSON.stringify(data.kintai)); }catch(e){}
           try{ if(window.KT && window.KT.reload) window.KT.reload(); }catch(e){}
         }
-        showToast('✅ ' + count + ' 件を復元しました');
+        if(data.owners && typeof window.applyCloudOwners === 'function'){ try{ window.applyCloudOwners(data.owners); }catch(e){} }
+        showToast('✅ 物件' + count + '件' + (ccount?('・契約'+ccount+'件'):'') + 'を復元しました');
         renderAll();
       }
     }catch(err){
