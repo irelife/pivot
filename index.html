@@ -1946,7 +1946,6 @@ body.tab-kanban .kb-toolbar { display:flex; }
       <button onclick="closeSettingsMenu();runAutoSwitch(true)">自動切替</button>
       <button onclick="closeSettingsMenu();downloadBackup()">バックアップ</button>
       <button onclick="closeSettingsMenu();document.getElementById('restoreFile').click()">復元</button>
-      <button onclick="closeSettingsMenu();restoreEmergencyBackup()" style="color:#c0392b">🆘 緊急復元(直前に戻す)</button>
       <button onclick="closeSettingsMenu();openImgDiagModal()">画像チェック</button>
       <div class="settings-menu-sep"></div>
       <button onclick="closeSettingsMenu();openCsvImportModal()" class="settings-menu-primary">CSV一括インポート</button>
@@ -2099,8 +2098,6 @@ body.tab-kanban .kb-toolbar { display:flex; }
         style="width:100px; border:1px solid #d9d4c7; background:#fff; color:#333; font-size:13px; font-weight:700; padding:7px 12px; border-radius:999px; font-family:inherit; text-align:center;">
       <button id="bstat-csv" onclick="KB.exportBrokerStatsCsv()" title="統計をCSV出力"
         style="border:none; background:#e6efe7; color:#3f6b4c; font-size:13px; font-weight:800; padding:8px 14px; border-radius:999px; cursor:pointer; font-family:inherit; white-space:nowrap;">⬇ CSV出力</button>
-      <button id="bstat-pdf" onclick="KB.exportBrokerStatsPdf()" title="社長向けPDF資料を出力（①ランキング＋②掘り起こし）"
-        style="border:none; background:#1f3a5f; color:#fff; font-size:13px; font-weight:800; padding:8px 14px; border-radius:999px; cursor:pointer; font-family:inherit; white-space:nowrap;">📄 PDF資料</button>
       <button class="pv-close" onclick="KB.closeBrokerStats()">×</button>
     </div>
   </div>
@@ -3367,20 +3364,6 @@ async function autoPullOnStart(){
   const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
   if(!url) return;
   if(_hasUnsavedChanges || _autoPushInFlight){ return; }
-  // ===== 起動時の自動退避 =====
-  // 取り込みで万一上書きされても戻せるよう、現在のローカルを緊急バックアップとして残す。
-  try{
-    const snap = {
-      at: new Date().toISOString(),
-      buildings: localStorage.getItem(STORAGE_KEY) || '{}',
-      contracts: localStorage.getItem('contract_kanban_v2') || '{}',
-      kintai: localStorage.getItem('pivot_kintai_v1') || '{}',
-    };
-    // 契約か物件が入っているときだけ退避（空を退避して上書きしない）
-    const hasC = Object.keys(JSON.parse(snap.contracts)).length > 0;
-    const hasB = Object.keys(JSON.parse(snap.buildings)).length > 0;
-    if(hasC || hasB){ localStorage.setItem('pivot_emergency_backup', JSON.stringify(snap)); }
-  }catch(e){ /* 退避失敗しても本処理は続行 */ }
   setSyncStatus('loading', '☁️ 確認中…');
   try{
     const r = await postToGas(url, { action:'load' });
@@ -3399,33 +3382,10 @@ async function autoPullOnStart(){
         (Object.keys((function(){try{return JSON.parse(localStorage.getItem('pivot_kintai_v1')||'{}');}catch(e){return {};}})()).length > 0);
       const shouldPull = (!localHasData) || (cloudMtime > localMtime);
       if(shouldPull){
-        // ===== 物件データ保護ガード（取り込み時）=====
-        let localBuildings = {};
-        try{ localBuildings = loadAll() || {}; }catch(e){ localBuildings = {}; }
-        const localBC = Object.keys(localBuildings).length;
-        const cloudBC = Object.keys(buildings || {}).length;
-        if(localBC >= 3 && cloudBC < localBC * 0.5){
-          // クラウドの物件が異常に少ない → 物件は取り込まず手元を守り、手元をクラウドへ送る
-          setSyncStatus('error', '⚠️ 物件データを保護しました');
-          scheduleAutoPush();
-        } else if(buildings && Object.keys(buildings).length >= 0){
+        if(buildings && Object.keys(buildings).length >= 0){
           localStorage.setItem(STORAGE_KEY, JSON.stringify(buildings));
         }
-        // ===== 契約データ保護ガード（取り込み時）=====
-        // クラウドの契約がローカルより大幅に少ない/空なら、ローカルの契約を消さない。
-        // (クラウド側が空・古い状態で起動したときに、手元の正しい契約を上書き消失する事故を防ぐ)
-        let localContracts = {};
-        try{ localContracts = JSON.parse(localStorage.getItem('contract_kanban_v2') || '{}'); }catch(e){ localContracts = {}; }
-        const localCC = Object.keys(localContracts).length;
-        const cloudCC = Object.keys(contracts || {}).length;
-        if(localCC >= 3 && cloudCC < localCC * 0.5){
-          // クラウド側が異常に少ない → 契約は取り込まず、手元を守る。手元をクラウドへ送って復旧。
-          setSyncStatus('error', '⚠️ 契約データを保護しました');
-          alert('クラウドの契約数('+cloudCC+'件)が、この端末('+localCC+'件)より大幅に少なかったため、\n手元の契約データを保護し、クラウドの内容では上書きしませんでした。\n\nこの端末の契約をクラウドへ送って復旧します。');
-          scheduleAutoPush();
-        } else {
-          localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts || {}));
-        }
+        localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts || {}));
         {
           // 勤怠は上書きせず、ローカルとクラウドを日付単位でマージ(複数端末で消えない)
           applyCloudKintai(kintai);
@@ -7183,49 +7143,22 @@ function downloadBackup(){
   const all = loadAll();
   let kintai = {};
   try{ kintai = JSON.parse(localStorage.getItem('pivot_kintai_v1') || '{}'); }catch(e){}
-  let contracts = {};
-  try{ contracts = JSON.parse(localStorage.getItem('contract_kanban_v2') || '{}'); }catch(e){}
-  let owners = [];
-  try{ owners = JSON.parse(localStorage.getItem('rent_owner_send_owners_v1') || '[]'); }catch(e){}
   const data = {
-    version: '1.1',
+    version: '1.0',
     exportedAt: new Date().toISOString(),
     buildings: all,
-    contracts: contracts,   // ★契約も含める（Contractタブのカード）
-    kintai: kintai,
-    owners: owners
+    kintai: kintai
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   const dt = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-  a.download = 'PIVOT_backup_' + dt + '.json';
+  a.download = 'PIVOT_simple_backup_' + dt + '.json';
   a.click();
   URL.revokeObjectURL(url);
-  showToast('💾 バックアップをダウンロードしました（物件・契約・勤怠）');
+  showToast('💾 バックアップをダウンロードしました');
 }
-
-// 緊急復元：起動時の自動退避（pivot_emergency_backup）から、直前の状態に戻す
-function restoreEmergencyBackup(){
-  let snap = null;
-  try{ snap = JSON.parse(localStorage.getItem('pivot_emergency_backup') || 'null'); }catch(e){ snap = null; }
-  if(!snap){ alert('緊急バックアップが見つかりませんでした。'); return; }
-  let bc=0, cc=0;
-  try{ bc = Object.keys(JSON.parse(snap.buildings||'{}')).length; }catch(e){}
-  try{ cc = Object.keys(JSON.parse(snap.contracts||'{}')).length; }catch(e){}
-  const when = snap.at ? new Date(snap.at).toLocaleString('ja-JP') : '不明';
-  if(!confirm('起動直前の状態に戻します。\n\n退避時刻: '+when+'\n物件: '+bc+'件 ／ 契約: '+cc+'件\n\n現在のデータは、この退避内容で上書きされます。よろしいですか？')) return;
-  try{
-    if(snap.buildings) localStorage.setItem(STORAGE_KEY, snap.buildings);
-    if(snap.contracts) localStorage.setItem('contract_kanban_v2', snap.contracts);
-    if(snap.kintai)    localStorage.setItem('pivot_kintai_v1', snap.kintai);
-    alert('復元しました。ページを再読み込みします。');
-    location.reload();
-  }catch(e){ alert('復元中にエラーが発生しました: '+e); }
-}
-try{ if(typeof window!=='undefined'){ window.restoreEmergencyBackup = restoreEmergencyBackup; } }catch(e){}
-
 function restoreBackup(event){
   const file = event.target.files[0];
   if(!file) return;
@@ -7238,21 +7171,15 @@ function restoreBackup(event){
         return;
       }
       const count = Object.keys(data.buildings).length;
-      const ccount = data.contracts ? Object.keys(data.contracts).length : 0;
-      if(!confirm('バックアップから物件 ' + count + ' 件' + (ccount?('・契約 '+ccount+' 件'):'') + ' を復元します。\nこの端末の現在データは上書きされます。\n本当に復元しますか?')){
+      if(!confirm('バックアップから ' + count + ' 件の物件を復元します。\n現在のデータは上書きされます。\n本当に復元しますか?')){
         return;
       }
       if(saveAll(data.buildings)){
-        if(data.contracts && typeof data.contracts === 'object'){
-          try{ localStorage.setItem('contract_kanban_v2', JSON.stringify(data.contracts)); }catch(e){}
-          try{ if(window.KB && window.KB.renderAll) window.KB.renderAll(); }catch(e){}
-        }
         if(data.kintai && typeof data.kintai === 'object'){
           try{ localStorage.setItem('pivot_kintai_v1', JSON.stringify(data.kintai)); }catch(e){}
           try{ if(window.KT && window.KT.reload) window.KT.reload(); }catch(e){}
         }
-        if(data.owners && typeof window.applyCloudOwners === 'function'){ try{ window.applyCloudOwners(data.owners); }catch(e){} }
-        showToast('✅ 物件' + count + '件' + (ccount?('・契約'+ccount+'件'):'') + 'を復元しました');
+        showToast('✅ ' + count + ' 件を復元しました');
         renderAll();
       }
     }catch(err){
@@ -11182,10 +11109,6 @@ function _canonBroker(name){
   }
   // ライフ系（IRE/ＩＲＥ/ライフ）→ ライフ
   if(/ライフ/.test(n) || /IRE/i.test(n) || /ＩＲＥ/.test(n)) return { key:'ライフ', name:'ライフ' };
-  // 大東建託系（リーシング・各店・全角半角ゆれ）→ 大東建託
-  if(/大東建託/.test(n)) return { key:'大東建託', name:'大東建託' };
-  // 中国バス不動産系（中国バス／中バス／LIFUKU併記など・各店）→ 中国バス不動産
-  if(/中国バス/.test(n) || /中バス/.test(n)) return { key:'中国バス不動産', name:'中国バス不動産' };
   return { key:n, name:String(name||'').trim() };
 }
 
@@ -11488,38 +11411,15 @@ function showBrokerCancels(i){
 function exportBrokerStatsCsv(){
   const { rows, fyValid, fy } = computeBrokerStats();
   if(rows.length === 0){ alert('出力できる統計データがありません。'); return; }
-
-  // "YYYYMMDD" を "YYYY-MM-DD" に整形
-  const fmtSort = (s) => (s && s.length>=8) ? (s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8))
-                       : (s && s.length>=6) ? (s.slice(0,4)+'-'+s.slice(4,6)) : '';
-  // 2つの日付(YYYYMMDD)の差を「およその月数」で返す
-  const monthsSince = (sort) => {
-    if(!sort || sort.length < 6) return '';
-    const y = parseInt(sort.slice(0,4),10), m = parseInt(sort.slice(4,6),10);
-    if(isNaN(y)||isNaN(m)) return '';
-    const now = new Date();
-    return (now.getFullYear()-y)*12 + (now.getMonth()+1 - m);
-  };
-
-  const header = ['順位','客付業者','全期間の客付け数','キャンセル数',
-                  '最終客付け日','客付けなし(ヶ月)','広告おすすめ',
-                  'よく客付けする物件Best3'];
+  const header = ['順位','客付業者','客付件数','キャンセル件数','物件名','担当者','客付時期','状態'];
   const lines = [header];
-
   rows.forEach((r, i) => {
-    // 成約のみの最新客付け（items は新しい順ソート済み）
-    const lastDeal = (r.items||[]).find(it => !it.cancel);
-    const lastSort = lastDeal ? lastDeal.sort : '';
-    const gap = monthsSince(lastSort);
-    // 6ヶ月以上客付けなし＝掘り起こし候補として印
-    const reco = (gap !== '' && gap >= 6) ? `★${gap}ヶ月ぶり掘り起こし` : '';
-    const best3 = (r.top3||[]).map(t=>`${t.name}(${t.count})`).join(' / ');
-    lines.push([
-      String(i+1), r.broker, String(r.count), String(r.cancel),
-      fmtSort(lastSort), (gap===''?'':String(gap)), reco, best3
-    ]);
+    r.items.forEach((it, j) => {
+      lines.push([ j===0 ? String(i+1) : '', j===0 ? r.broker : '', j===0 ? String(r.count) : '',
+                   j===0 ? String(r.cancel) : '',
+                   it.property, it.staff, it.when, it.cancel ? 'キャンセル' : '成約' ]);
+    });
   });
-
   const csv = lines.map(row => row.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\r\n');
   const bom = '\uFEFF';
   const blob = new Blob([bom + csv], {type:'text/csv;charset=utf-8;'});
@@ -11530,116 +11430,9 @@ function exportBrokerStatsCsv(){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
-// 社長向けPDF資料を出力（印刷ダイアログ方式）。①ランキングTOP20 ＋ ②掘り起こし候補
-function exportBrokerStatsPdf(){
-  const { rows, fyValid, fy } = computeBrokerStats();
-  if(rows.length === 0){ alert('出力できる統計データがありません。'); return; }
-  const esc = (s)=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-  // 集計期間（客付け日の最古〜最新）
-  let allSort = [];
-  rows.forEach(r => (r.items||[]).forEach(it => { if(it.sort && it.sort!=='00000000') allSort.push(it.sort); }));
-  allSort.sort();
-  const fmtSort = (s)=> (s && s.length>=8) ? (s.slice(0,4)+'/'+s.slice(4,6)+'/'+s.slice(6,8))
-                     : (s && s.length>=6) ? (s.slice(0,4)+'/'+s.slice(4,6)) : '';
-  const period = allSort.length ? (fmtSort(allSort[0]) + ' 〜 ' + fmtSort(allSort[allSort.length-1])) : '全期間';
-
-  // 各業者の最終客付け・経過月数・Best3を用意
-  const now = new Date();
-  rows.forEach(r => {
-    const lastDeal = (r.items||[]).find(it => !it.cancel);
-    r._lastSort = lastDeal ? lastDeal.sort : '';
-    if(r._lastSort && r._lastSort.length>=6){
-      const y=+r._lastSort.slice(0,4), mo=+r._lastSort.slice(4,6);
-      let g=(now.getFullYear()-y)*12 + (now.getMonth()+1 - mo);
-      r._gap = g<0 ? 0 : g;
-      r._lastDisp = fmtSort(r._lastSort);
-    } else { r._gap=''; r._lastDisp=''; }
-    r._best3 = (r.top3||[]).map(t=>esc(t.name)+'('+t.count+')').join(' / ');
-  });
-
-  // ① ランキングTOP20
-  let rankRows = '';
-  rows.slice(0,20).forEach((r,i)=>{
-    const cls = (i<3) ? ' class="top3"' : (i%2===1 ? ' class="alt"' : '');
-    rankRows += `<tr${cls}>
-      <td class="c">${i+1}</td>
-      <td class="b">${esc(r.broker)}</td>
-      <td class="c">${r.count}</td>
-      <td class="c">${r.cancel||'－'}</td>
-      <td class="c">${r._lastDisp||'－'}</td>
-      <td>${r._best3}</td></tr>`;
-  });
-
-  // ② 掘り起こし候補（3件以上・6ヶ月以上・経過の長い順）
-  const dig = rows.filter(r=> r._gap!=='' && r._gap>=6 && r.count>=3).sort((a,b)=> b._gap - a._gap);
-  let digRows = '';
-  dig.forEach(r=>{
-    const hot = (r._gap>=12) ? ' class="hot"' : '';
-    const b2 = (r.top3||[]).slice(0,2).map(t=>esc(t.name)+'('+t.count+')').join(' / ');
-    digRows += `<tr${hot}>
-      <td class="b">${esc(r.broker)}</td>
-      <td class="c">${r.count} 件</td>
-      <td class="c">${r._lastDisp}</td>
-      <td class="c gap">${r._gap}ヶ月</td>
-      <td>${b2}</td></tr>`;
-  });
-
-  const today = new Date();
-  const dstr = `${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日`;
-
-  const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8">
-<title>客付業者分析レポート</title>
-<style>
-  @page { size: A4; margin: 14mm 12mm; }
-  * { box-sizing: border-box; }
-  body { font-family: "Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif; color:#222; margin:0; }
-  h1 { font-size:22px; color:#1f3a5f; margin:0 0 4px; }
-  .sub { font-size:11px; color:#555; margin:0 0 6px; }
-  .rule { height:2px; background:#1f3a5f; margin:6px 0 14px; }
-  h2 { font-size:15px; color:#1f3a5f; margin:18px 0 4px; }
-  .note { font-size:10px; color:#666; margin:2px 0 8px; }
-  table { width:100%; border-collapse:collapse; font-size:10px; }
-  th { background:#1f3a5f; color:#fff; font-weight:700; padding:5px 6px; text-align:left; border:0.5px solid #cfd6de; }
-  td { padding:5px 6px; border:0.5px solid #cfd6de; vertical-align:middle; }
-  td.c { text-align:center; }
-  td.b { font-weight:700; }
-  tr.alt td { background:#f4f6f8; }
-  tr.top3 td { background:#e8f0fb; }
-  #dig th { background:#b7791f; }
-  tr.hot td { background:#fdecea; }
-  td.gap { color:#c0392b; font-weight:700; }
-  .pagebreak { page-break-before: always; }
-  @media print { .noprint { display:none; } }
-  .noprint { position:fixed; top:10px; right:10px; }
-  .noprint button { font-size:14px; font-weight:700; padding:8px 16px; border:none; border-radius:8px; background:#1f3a5f; color:#fff; cursor:pointer; }
-</style></head><body>
-<div class="noprint"><button onclick="window.print()">🖨 PDFとして保存 / 印刷</button></div>
-<h1>客付業者 分析レポート</h1>
-<div class="sub">作成日：${dstr} ／ 集計期間：${period}（全客付け実績）${fyValid?'／年絞り込み: '+fy+'年':''}</div>
-<div class="rule"></div>
-
-<h2>① よく客付けしてくれる業者 TOP20</h2>
-<div class="note">成約実績の多い順。感謝を伝えつつ関係を維持したい主力業者です。上位3社は青で強調しています。</div>
-<table>
-  <tr><th style="width:8%">順位</th><th style="width:20%">客付業者</th><th style="width:10%">客付け数</th><th style="width:8%">ｷｬﾝｾﾙ</th><th style="width:14%">最終客付け</th><th>よく客付けする物件 Best3</th></tr>
-  ${rankRows}
-</table>
-
-<div class="pagebreak"></div>
-<h2 id="digttl">② 掘り起こし候補（広告・再アプローチ対象）</h2>
-<div class="note">過去に客付け実績（3件以上）がありながら、6ヶ月以上 紹介の途絶えている業者。経過の長い順。赤い行＝1年以上（最優先）。</div>
-<table id="dig">
-  <tr><th style="width:24%">業者名</th><th style="width:14%">過去の客付け</th><th style="width:16%">最終客付け</th><th style="width:14%">客付けなし</th><th>得意物件（過去実績）</th></tr>
-  ${digRows || '<tr><td colspan="5" class="c">該当なし</td></tr>'}
-</table>
-</body></html>`;
-
-  const w = window.open('', '_blank');
-  if(!w){ alert('ポップアップがブロックされました。このサイトのポップアップを許可してください。'); return; }
-  w.document.write(html); w.document.close();
-  setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 500);
-}
+// 日付文字列(YYYY-MM-DD…)から日本の年度を求める。4月始まり〜翌3月。
+// 例: 2026-03-31 → 2025(年度) / 2026-04-01 → 2026(年度)
+function fiscalYearOf(dateStr){
   if(!dateStr) return '';
   const y = parseInt(String(dateStr).slice(0,4),10);
   const m = parseInt(String(dateStr).slice(5,7),10);
@@ -13175,7 +12968,6 @@ try{window.KB.openBrokerStats=openBrokerStats;}catch(e){}
 try{window.KB.closeBrokerStats=closeBrokerStats;}catch(e){}
 try{window.KB.renderBrokerStats=renderBrokerStats;}catch(e){}
 try{window.KB.exportBrokerStatsCsv=exportBrokerStatsCsv;}catch(e){}
-try{window.KB.exportBrokerStatsPdf=exportBrokerStatsPdf;}catch(e){}
 try{window.KB.filterBrokerYear=filterBrokerYear;}catch(e){}
 try{window.KB.toggleBrokerCard=toggleBrokerCard;}catch(e){}
 try{window.KB.showBrokerCancels=showBrokerCancels;}catch(e){}
