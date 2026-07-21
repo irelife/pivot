@@ -11546,6 +11546,26 @@ function exportBrokerStatsPdf(){
 
   // 各業者の最終客付け・経過月数・Best3を用意
   const now = new Date();
+
+  // 物件名 → 住所エリア判定用マップ
+  const bAll = (typeof loadAll==='function') ? loadAll() : {};
+  const addrByName = {};
+  Object.values(bAll).forEach(b => { if(b && b.name) addrByName[String(b.name).trim()] = b.addr || ''; });
+  // エリア色（福山=紫 / 倉敷=青 / 岡山=緑 / その他=灰）
+  const areaOf = (addr)=>{
+    const a = String(addr||'');
+    if(/福山/.test(a)) return {key:'福山', color:'#7c3aed', bg:'#f5f3ff'};
+    if(/倉敷/.test(a)) return {key:'倉敷', color:'#1d4ed8', bg:'#eff6ff'};
+    if(/岡山/.test(a)) return {key:'岡山', color:'#047857', bg:'#ecfdf5'};
+    if(/広島/.test(a)) return {key:'広島', color:'#b7791f', bg:'#fdf3e0'};
+    return {key:'', color:'#555', bg:'#f4f6f8'};
+  };
+  // 業者の代表エリア = Best3の1位物件のエリア
+  const brokerArea = (r)=>{
+    const top = (r.top3 && r.top3[0]) ? r.top3[0].name : '';
+    return areaOf(addrByName[top] || '');
+  };
+
   rows.forEach(r => {
     const lastDeal = (r.items||[]).find(it => !it.cancel);
     r._lastSort = lastDeal ? lastDeal.sort : '';
@@ -11556,15 +11576,18 @@ function exportBrokerStatsPdf(){
       r._lastDisp = fmtSort(r._lastSort);
     } else { r._gap=''; r._lastDisp=''; }
     r._best3 = (r.top3||[]).map(t=>esc(t.name)+'('+t.count+')').join(' / ');
+    r._area = brokerArea(r);
   });
 
-  // ① ランキングTOP20
+  // ① ランキングTOP20（業者名を地域色・地域ドット付き）
   let rankRows = '';
   rows.slice(0,20).forEach((r,i)=>{
     const cls = (i<3) ? ' class="top3"' : (i%2===1 ? ' class="alt"' : '');
+    const dot = `<span class="dot" style="background:${r._area.color}"></span>`;
+    const nm = `<span style="color:${r._area.color};font-weight:700">${dot}${esc(r.broker)}</span>`;
     rankRows += `<tr${cls}>
       <td class="c">${i+1}</td>
-      <td class="b">${esc(r.broker)}</td>
+      <td>${nm}</td>
       <td class="c">${r.count}</td>
       <td class="c">${r.cancel||'－'}</td>
       <td class="c">${r._lastDisp||'－'}</td>
@@ -11575,10 +11598,13 @@ function exportBrokerStatsPdf(){
   const dig = rows.filter(r=> r._gap!=='' && r._gap>=6 && r.count>=3).sort((a,b)=> b._gap - a._gap);
   let digRows = '';
   dig.forEach(r=>{
-    const hot = (r._gap>=12) ? ' class="hot"' : '';
+    // 緊急度クラス：6-11ヶ月=warn(黄) / 12-23ヶ月=hot(橙) / 24ヶ月以上=crit(赤)
+    const lv = (r._gap>=24) ? ' class="crit"' : (r._gap>=12) ? ' class="hot"' : ' class="warn"';
+    const dot = `<span class="dot" style="background:${r._area.color}"></span>`;
+    const nm = `<span style="color:${r._area.color};font-weight:700">${dot}${esc(r.broker)}</span>`;
     const b2 = (r.top3||[]).slice(0,2).map(t=>esc(t.name)+'('+t.count+')').join(' / ');
-    digRows += `<tr${hot}>
-      <td class="b">${esc(r.broker)}</td>
+    digRows += `<tr${lv}>
+      <td>${nm}</td>
       <td class="c">${r.count} 件</td>
       <td class="c">${r._lastDisp}</td>
       <td class="c gap">${r._gap}ヶ月</td>
@@ -11607,10 +11633,20 @@ function exportBrokerStatsPdf(){
   tr.alt td { background:#f4f6f8; }
   tr.top3 td { background:#e8f0fb; }
   #dig th { background:#b7791f; }
-  tr.hot td { background:#fdecea; }
+  tr.warn td { background:#fdf6e3; }   /* 6-11ヶ月：黄 */
+  tr.hot  td { background:#fdecd7; }   /* 12-23ヶ月：橙 */
+  tr.crit td { background:#fde0dd; }   /* 24ヶ月以上：赤 */
   td.gap { color:#c0392b; font-weight:700; }
+  tr.crit td.gap { color:#7a1f16; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:5px; vertical-align:middle; }
+  .legend { font-size:9px; color:#555; margin:4px 0 8px; }
+  .legend span { display:inline-block; margin-right:10px; }
+  .lg { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:3px; vertical-align:middle; }
   .pagebreak { page-break-before: always; }
-  @media print { .noprint { display:none; } }
+  @media print {
+    .noprint { display:none; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
   .noprint { position:fixed; top:10px; right:10px; }
   .noprint button { font-size:14px; font-weight:700; padding:8px 16px; border:none; border-radius:8px; background:#1f3a5f; color:#fff; cursor:pointer; }
 </style></head><body>
@@ -11621,6 +11657,7 @@ function exportBrokerStatsPdf(){
 
 <h2>① よく客付けしてくれる業者 TOP20</h2>
 <div class="note">成約実績の多い順。感謝を伝えつつ関係を維持したい主力業者です。上位3社は青で強調しています。</div>
+<div class="legend">エリア色：<span><i class="lg" style="background:#7c3aed"></i>福山</span><span><i class="lg" style="background:#1d4ed8"></i>倉敷</span><span><i class="lg" style="background:#047857"></i>岡山</span><span><i class="lg" style="background:#b7791f"></i>広島(その他)</span></div>
 <table>
   <tr><th style="width:8%">順位</th><th style="width:20%">客付業者</th><th style="width:10%">客付け数</th><th style="width:8%">ｷｬﾝｾﾙ</th><th style="width:14%">最終客付け</th><th>よく客付けする物件 Best3</th></tr>
   ${rankRows}
@@ -11628,7 +11665,8 @@ function exportBrokerStatsPdf(){
 
 <div class="pagebreak"></div>
 <h2 id="digttl">② 掘り起こし候補（広告・再アプローチ対象）</h2>
-<div class="note">過去に客付け実績（3件以上）がありながら、6ヶ月以上 紹介の途絶えている業者。経過の長い順。赤い行＝1年以上（最優先）。</div>
+<div class="note">過去に客付け実績（3件以上）がありながら、6ヶ月以上 紹介の途絶えている業者。経過の長い順。色が濃いほど再アプローチの優先度が高い業者です。</div>
+<div class="legend">緊急度：<span><i class="lg" style="background:#fdf6e3;border:0.5px solid #cfc"></i>6〜11ヶ月</span><span><i class="lg" style="background:#fdecd7;border:0.5px solid #e5b"></i>1年以上</span><span><i class="lg" style="background:#fde0dd;border:0.5px solid #d88"></i>2年以上(最優先)</span>／ 業者名の色はエリア（福山=紫・倉敷=青・岡山=緑）</div>
 <table id="dig">
   <tr><th style="width:24%">業者名</th><th style="width:14%">過去の客付け</th><th style="width:16%">最終客付け</th><th style="width:14%">客付けなし</th><th>得意物件（過去実績）</th></tr>
   ${digRows || '<tr><td colspan="5" class="c">該当なし</td></tr>'}
