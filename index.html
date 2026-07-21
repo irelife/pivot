@@ -2098,6 +2098,8 @@ body.tab-kanban .kb-toolbar { display:flex; }
         style="width:100px; border:1px solid #d9d4c7; background:#fff; color:#333; font-size:13px; font-weight:700; padding:7px 12px; border-radius:999px; font-family:inherit; text-align:center;">
       <button id="bstat-csv" onclick="KB.exportBrokerStatsCsv()" title="統計をCSV出力"
         style="border:none; background:#e6efe7; color:#3f6b4c; font-size:13px; font-weight:800; padding:8px 14px; border-radius:999px; cursor:pointer; font-family:inherit; white-space:nowrap;">⬇ CSV出力</button>
+      <button id="bstat-pdf" onclick="KB.exportBrokerStatsPdf()" title="社長向けPDF資料を出力（①ランキング＋②掘り起こし）"
+        style="border:none; background:#1f3a5f; color:#fff; font-size:13px; font-weight:800; padding:8px 14px; border-radius:999px; cursor:pointer; font-family:inherit; white-space:nowrap;">📄 PDF資料</button>
       <button class="pv-close" onclick="KB.closeBrokerStats()">×</button>
     </div>
   </div>
@@ -11109,6 +11111,10 @@ function _canonBroker(name){
   }
   // ライフ系（IRE/ＩＲＥ/ライフ）→ ライフ
   if(/ライフ/.test(n) || /IRE/i.test(n) || /ＩＲＥ/.test(n)) return { key:'ライフ', name:'ライフ' };
+  // 大東建託系（リーシング・各店・全角半角ゆれ）→ 大東建託
+  if(/大東建託/.test(n)) return { key:'大東建託', name:'大東建託' };
+  // 中国バス不動産系（中国バス／中バス／LIFUKU併記など・各店）→ 中国バス不動産
+  if(/中国バス/.test(n) || /中バス/.test(n)) return { key:'中国バス不動産', name:'中国バス不動産' };
   return { key:n, name:String(name||'').trim() };
 }
 
@@ -11453,9 +11459,116 @@ function exportBrokerStatsCsv(){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
-// 日付文字列(YYYY-MM-DD…)から日本の年度を求める。4月始まり〜翌3月。
-// 例: 2026-03-31 → 2025(年度) / 2026-04-01 → 2026(年度)
-function fiscalYearOf(dateStr){
+// 社長向けPDF資料を出力（印刷ダイアログ方式）。①ランキングTOP20 ＋ ②掘り起こし候補
+function exportBrokerStatsPdf(){
+  const { rows, fyValid, fy } = computeBrokerStats();
+  if(rows.length === 0){ alert('出力できる統計データがありません。'); return; }
+  const esc = (s)=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // 集計期間（客付け日の最古〜最新）
+  let allSort = [];
+  rows.forEach(r => (r.items||[]).forEach(it => { if(it.sort && it.sort!=='00000000') allSort.push(it.sort); }));
+  allSort.sort();
+  const fmtSort = (s)=> (s && s.length>=8) ? (s.slice(0,4)+'/'+s.slice(4,6)+'/'+s.slice(6,8))
+                     : (s && s.length>=6) ? (s.slice(0,4)+'/'+s.slice(4,6)) : '';
+  const period = allSort.length ? (fmtSort(allSort[0]) + ' 〜 ' + fmtSort(allSort[allSort.length-1])) : '全期間';
+
+  // 各業者の最終客付け・経過月数・Best3を用意
+  const now = new Date();
+  rows.forEach(r => {
+    const lastDeal = (r.items||[]).find(it => !it.cancel);
+    r._lastSort = lastDeal ? lastDeal.sort : '';
+    if(r._lastSort && r._lastSort.length>=6){
+      const y=+r._lastSort.slice(0,4), mo=+r._lastSort.slice(4,6);
+      let g=(now.getFullYear()-y)*12 + (now.getMonth()+1 - mo);
+      r._gap = g<0 ? 0 : g;
+      r._lastDisp = fmtSort(r._lastSort);
+    } else { r._gap=''; r._lastDisp=''; }
+    r._best3 = (r.top3||[]).map(t=>esc(t.name)+'('+t.count+')').join(' / ');
+  });
+
+  // ① ランキングTOP20
+  let rankRows = '';
+  rows.slice(0,20).forEach((r,i)=>{
+    const cls = (i<3) ? ' class="top3"' : (i%2===1 ? ' class="alt"' : '');
+    rankRows += `<tr${cls}>
+      <td class="c">${i+1}</td>
+      <td class="b">${esc(r.broker)}</td>
+      <td class="c">${r.count}</td>
+      <td class="c">${r.cancel||'－'}</td>
+      <td class="c">${r._lastDisp||'－'}</td>
+      <td>${r._best3}</td></tr>`;
+  });
+
+  // ② 掘り起こし候補（3件以上・6ヶ月以上・経過の長い順）
+  const dig = rows.filter(r=> r._gap!=='' && r._gap>=6 && r.count>=3).sort((a,b)=> b._gap - a._gap);
+  let digRows = '';
+  dig.forEach(r=>{
+    const hot = (r._gap>=12) ? ' class="hot"' : '';
+    const b2 = (r.top3||[]).slice(0,2).map(t=>esc(t.name)+'('+t.count+')').join(' / ');
+    digRows += `<tr${hot}>
+      <td class="b">${esc(r.broker)}</td>
+      <td class="c">${r.count} 件</td>
+      <td class="c">${r._lastDisp}</td>
+      <td class="c gap">${r._gap}ヶ月</td>
+      <td>${b2}</td></tr>`;
+  });
+
+  const today = new Date();
+  const dstr = `${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日`;
+
+  const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8">
+<title>客付業者分析レポート</title>
+<style>
+  @page { size: A4; margin: 14mm 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif; color:#222; margin:0; }
+  h1 { font-size:22px; color:#1f3a5f; margin:0 0 4px; }
+  .sub { font-size:11px; color:#555; margin:0 0 6px; }
+  .rule { height:2px; background:#1f3a5f; margin:6px 0 14px; }
+  h2 { font-size:15px; color:#1f3a5f; margin:18px 0 4px; }
+  .note { font-size:10px; color:#666; margin:2px 0 8px; }
+  table { width:100%; border-collapse:collapse; font-size:10px; }
+  th { background:#1f3a5f; color:#fff; font-weight:700; padding:5px 6px; text-align:left; border:0.5px solid #cfd6de; }
+  td { padding:5px 6px; border:0.5px solid #cfd6de; vertical-align:middle; }
+  td.c { text-align:center; }
+  td.b { font-weight:700; }
+  tr.alt td { background:#f4f6f8; }
+  tr.top3 td { background:#e8f0fb; }
+  #dig th { background:#b7791f; }
+  tr.hot td { background:#fdecea; }
+  td.gap { color:#c0392b; font-weight:700; }
+  .pagebreak { page-break-before: always; }
+  @media print { .noprint { display:none; } }
+  .noprint { position:fixed; top:10px; right:10px; }
+  .noprint button { font-size:14px; font-weight:700; padding:8px 16px; border:none; border-radius:8px; background:#1f3a5f; color:#fff; cursor:pointer; }
+</style></head><body>
+<div class="noprint"><button onclick="window.print()">🖨 PDFとして保存 / 印刷</button></div>
+<h1>客付業者 分析レポート</h1>
+<div class="sub">作成日：${dstr} ／ 集計期間：${period}（全客付け実績）${fyValid?'／年絞り込み: '+fy+'年':''}</div>
+<div class="rule"></div>
+
+<h2>① よく客付けしてくれる業者 TOP20</h2>
+<div class="note">成約実績の多い順。感謝を伝えつつ関係を維持したい主力業者です。上位3社は青で強調しています。</div>
+<table>
+  <tr><th style="width:8%">順位</th><th style="width:20%">客付業者</th><th style="width:10%">客付け数</th><th style="width:8%">ｷｬﾝｾﾙ</th><th style="width:14%">最終客付け</th><th>よく客付けする物件 Best3</th></tr>
+  ${rankRows}
+</table>
+
+<div class="pagebreak"></div>
+<h2 id="digttl">② 掘り起こし候補（広告・再アプローチ対象）</h2>
+<div class="note">過去に客付け実績（3件以上）がありながら、6ヶ月以上 紹介の途絶えている業者。経過の長い順。赤い行＝1年以上（最優先）。</div>
+<table id="dig">
+  <tr><th style="width:24%">業者名</th><th style="width:14%">過去の客付け</th><th style="width:16%">最終客付け</th><th style="width:14%">客付けなし</th><th>得意物件（過去実績）</th></tr>
+  ${digRows || '<tr><td colspan="5" class="c">該当なし</td></tr>'}
+</table>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  if(!w){ alert('ポップアップがブロックされました。このサイトのポップアップを許可してください。'); return; }
+  w.document.write(html); w.document.close();
+  setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 500);
+}
   if(!dateStr) return '';
   const y = parseInt(String(dateStr).slice(0,4),10);
   const m = parseInt(String(dateStr).slice(5,7),10);
@@ -12991,6 +13104,7 @@ try{window.KB.openBrokerStats=openBrokerStats;}catch(e){}
 try{window.KB.closeBrokerStats=closeBrokerStats;}catch(e){}
 try{window.KB.renderBrokerStats=renderBrokerStats;}catch(e){}
 try{window.KB.exportBrokerStatsCsv=exportBrokerStatsCsv;}catch(e){}
+try{window.KB.exportBrokerStatsPdf=exportBrokerStatsPdf;}catch(e){}
 try{window.KB.filterBrokerYear=filterBrokerYear;}catch(e){}
 try{window.KB.toggleBrokerCard=toggleBrokerCard;}catch(e){}
 try{window.KB.showBrokerCancels=showBrokerCancels;}catch(e){}
