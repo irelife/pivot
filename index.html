@@ -11411,15 +11411,38 @@ function showBrokerCancels(i){
 function exportBrokerStatsCsv(){
   const { rows, fyValid, fy } = computeBrokerStats();
   if(rows.length === 0){ alert('出力できる統計データがありません。'); return; }
-  const header = ['順位','客付業者','客付件数','キャンセル件数','物件名','担当者','客付時期','状態'];
+
+  // "YYYYMMDD" を "YYYY-MM-DD" に整形
+  const fmtSort = (s) => (s && s.length>=8) ? (s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8))
+                       : (s && s.length>=6) ? (s.slice(0,4)+'-'+s.slice(4,6)) : '';
+  // 2つの日付(YYYYMMDD)の差を「およその月数」で返す
+  const monthsSince = (sort) => {
+    if(!sort || sort.length < 6) return '';
+    const y = parseInt(sort.slice(0,4),10), m = parseInt(sort.slice(4,6),10);
+    if(isNaN(y)||isNaN(m)) return '';
+    const now = new Date();
+    return (now.getFullYear()-y)*12 + (now.getMonth()+1 - m);
+  };
+
+  const header = ['順位','客付業者','全期間の客付け数','キャンセル数',
+                  '最終客付け日','客付けなし(ヶ月)','広告おすすめ',
+                  'よく客付けする物件Best3'];
   const lines = [header];
+
   rows.forEach((r, i) => {
-    r.items.forEach((it, j) => {
-      lines.push([ j===0 ? String(i+1) : '', j===0 ? r.broker : '', j===0 ? String(r.count) : '',
-                   j===0 ? String(r.cancel) : '',
-                   it.property, it.staff, it.when, it.cancel ? 'キャンセル' : '成約' ]);
-    });
+    // 成約のみの最新客付け（items は新しい順ソート済み）
+    const lastDeal = (r.items||[]).find(it => !it.cancel);
+    const lastSort = lastDeal ? lastDeal.sort : '';
+    const gap = monthsSince(lastSort);
+    // 6ヶ月以上客付けなし＝掘り起こし候補として印
+    const reco = (gap !== '' && gap >= 6) ? `★${gap}ヶ月ぶり掘り起こし` : '';
+    const best3 = (r.top3||[]).map(t=>`${t.name}(${t.count})`).join(' / ');
+    lines.push([
+      String(i+1), r.broker, String(r.count), String(r.cancel),
+      fmtSort(lastSort), (gap===''?'':String(gap)), reco, best3
+    ]);
   });
+
   const csv = lines.map(row => row.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\r\n');
   const bom = '\uFEFF';
   const blob = new Blob([bom + csv], {type:'text/csv;charset=utf-8;'});
