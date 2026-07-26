@@ -9475,6 +9475,8 @@ function renderExcludedViewOnly(){
         <span class="pill" style="background:#f3ead4;color:#8a6d2f;font-weight:800;">別管理</span>
         <span class="spacer"></span>
         <span class="vac" style="color:#1565c0;">👁 閲覧のみ</span>
+        <button onclick="event.stopPropagation();RENT.unexcludeOwner('${esc(o.name).replace(/'/g,"\\'")}')" title="別管理から外して通常の送信一覧に戻す"
+          style="flex-shrink:0;margin-left:10px;border:1px solid #d9c9a8;background:#fff;color:#8a6d2f;font-size:.74rem;font-weight:800;padding:5px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;">✕ 別管理から外す</button>
       </div>
       <div class="pv-body open" style="padding:10px 12px;">
         <div style="font-size:.78rem;color:var(--rt-muted);margin-bottom:6px;">明細PDFを取り込んでいないため閲覧専用です。月をタップすると明細が開きます。蓄積するにはPCで明細PDFを取り込んでください。</div>
@@ -9597,6 +9599,8 @@ function renderPreview(){
             <span class="pill" style="background:#f3ead4;color:#8a6d2f;font-weight:800;">別管理</span>
             <span class="spacer"></span>
             <span class="vac">${d.yearOnly?'📊 年間収支表':('PDF '+pageList.length+'ページ'+(monthStr?(' / '+esc(monthStr)):''))}</span>
+            <button onclick="event.stopPropagation();RENT.unexcludeOwner('${esc(d.owner).replace(/'/g,"\\'")}')" title="別管理から外して通常の送信一覧に戻す"
+              style="flex-shrink:0;margin-left:10px;border:1px solid #d9c9a8;background:#fff;color:#8a6d2f;font-size:.74rem;font-weight:800;padding:5px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;">✕ 別管理から外す</button>
           </div>
           <div class="pv-body open" style="padding:10px 12px;">
             <div class="pv-meta">対象物件: <b>${propTxt||'—'}</b>　|　メール送信は行いません</div>
@@ -9964,6 +9968,17 @@ async function downloadOwnerPdf(i){
 const SOPHIA_GAS_KEY='sophia_gas_url_v1';
 const SOPHIA_GAS_DEFAULT='https://script.google.com/macros/s/AKfycbziyfOAZHMr1m9ocFJrl0uLPGg5pwSZoHbb_gJETlEbGlHcHdmu6ZglOVl7TwJqMYuq/exec';
 function getSophiaGasUrl(){ try{ return localStorage.getItem(SOPHIA_GAS_KEY)||SOPHIA_GAS_DEFAULT; }catch(e){ return SOPHIA_GAS_DEFAULT; } }
+// 別管理（除外）から外して、通常の送信一覧へ戻す
+function unexcludeOwner(name){
+  const o = owners.find(x => norm(x.name) === norm(name));
+  if(!o){ toast("オーナーが見つかりません"); return; }
+  if(!confirm("「" + o.name + "」を別管理から外しますか?\n\n通常の送信一覧に戻ります。\n共用Driveに蓄積した明細は消えません。")) return;
+  o.exclude = false;
+  saveOwners();
+  renderOwners();
+  renderPreview();
+  toast(o.name + " を別管理から外しました");
+}
 function saveSophiaGasUrl(){
   const el=document.getElementById('sophiaGasUrl'); if(!el) return;
   const url=(el.value||'').trim();
@@ -10194,7 +10209,7 @@ function activate(){
 }
 
 
-window.RENT = { activate, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, removeFromList, renderHistory, clearHistory, checkBounces, accumulateOwnerMonth, accumulateOwnerYear, mergeYearForOwner, deleteExAccum, deleteExYear, saveSophiaGasUrl, viewExAccum };
+window.RENT = { activate, unexcludeOwner, setEmail, showView, addOwnerRow, resetOwners, resetTmpl, expandAll, renderPreview, saveTmpl, editOwner, editProps, delOwner, togglePv, copyBody, previewOwnerPdf, downloadOwnerPdf, sendViaGmail, renderOwners, createDraftsForChecked, sendMailsForChecked, updateCheckCount, toggleCheckAll, sendOne, draftOne, unsendOne, removeFromList, renderHistory, clearHistory, checkBounces, accumulateOwnerMonth, accumulateOwnerYear, mergeYearForOwner, deleteExAccum, deleteExYear, saveSophiaGasUrl, viewExAccum };
 })();
 </script>
 <script>
