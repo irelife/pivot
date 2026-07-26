@@ -808,6 +808,17 @@ body.tab-kanban .kb-toolbar { display:flex; }
   }
   #bstat-body .bstat-chip b { font-size: 15px; color: #111; font-weight: 800; }
   #bstat-body .bstat-chip-cx { border-color:#f3c6c6; color:#b23; }
+  #bstat-body .bstat-chip-rj { border-color:#c9b6e8; color:#5b3a8e; }
+  #bstat-body .bstat-chip-rj b { color:#5b3a8e; }
+  #bstat-body .bstat-ratenote { font-size:11px; color:#8a8a8f; padding:0 4px 12px; }
+  #bstat-body .bstat-rate { font-size:12.5px; font-weight:700; color:#555; padding:2px 2px 6px 57px; }
+  #bstat-body .bstat-rate b { font-size:14px; }
+  #bstat-body .bstat-rate .rt-cx { color:#c0392b; }
+  #bstat-body .bstat-rate .rt-rj { color:#5b3a8e; }
+  #bstat-body .bstat-badge-rj { background:#efe6fa !important; border:1.5px solid #c9b6e8; }
+  #bstat-body .bstat-badge-rj .bnum, #bstat-body .bstat-badge-rj .blbl { color:#5b3a8e !important; }
+  #bstat-body .cxtag.rjtag { background:#efe6fa; color:#5b3a8e; }
+  @media (max-width: 640px){ #bstat-body .bstat-rate { padding-left:2px; } }
   #bstat-body .bstat-chip-cx b { color:#c0392b; }
   /* 年別推移 */
   #bstat-body .bstat-years { background:#fff; border:1.5px solid #ececef; border-radius:14px; padding:14px 16px; margin:0 2px 16px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
@@ -11145,7 +11156,16 @@ function _histWhen(h){
   return{year:"",disp:"時期不明",sort:"00000000"};
 }
 // キャンセル判定
-function _isCancel(s){ return /キャンセル|解約|取消|中止/.test(String(s||"")); }
+function _isCancel(s){ return /キャンセル|解約|取消|中止|審査落ち/.test(String(s||"")); }
+// 過去データの状態文字列を「成約 / キャンセル / 審査落ち」に分類する
+function _cancelKind(s){
+  const t = String(s||"");
+  if(/審査落ち|否決|非承認/.test(t)) return "reject";
+  if(/キャンセル|解約|取消|中止/.test(t)) return "cancel";
+  return "ok";
+}
+// 率の表示（小数第1位まで。母数0は「—」）
+function _rate(n, d){ return (d>0) ? (Math.round(n/d*1000)/10) + "%" : "—"; }
 
 // ====== 客付業者 統計 ======
 function openBrokerStats(){
@@ -11194,18 +11214,21 @@ function computeBrokerStats(){
   const yearInput = document.getElementById('bstat-year');
   const fy = yearInput ? String(yearInput.value||'').trim() : '';
   const fyValid = /^\d{4}$/.test(fy);
-  const map = {};      // canonKey -> {broker, count, cancel, items:[], months:{}}
-  const yearMap = {};  // year -> {count, cancel}
-  const monthAll = {}; // "YYYY-MM" -> {count, cancel} 全業者横断
-  const propMap = {};  // 建物名 -> { building, count, cancel, brokers:{brokerName:count} } 物件別
+  const map = {};      // canonKey -> {broker, count, cancel, reject, items:[], months:{}}
+  const yearMap = {};  // year -> {count, cancel, reject}
+  const monthAll = {}; // "YYYY-MM" -> {count, cancel, reject} 全業者横断
+  const propMap = {};  // 建物名 -> { building, count, brokers:{brokerName:count} } 物件別
 
-  function add(broker, when, propName, building, staff, cancel){
+  // kind: 'ok'(成約) / 'cancel'(キャンセル) / 'reject'(審査落ち)
+  function add(broker, when, propName, building, staff, kind){
     const canon = _canonBroker(broker);
     const key = canon.key;
     if(!key) return;
-    if(!map[key]) map[key] = { broker: canon.name, count:0, cancel:0, items:[], months:{}, bldg:{} };
+    if(!map[key]) map[key] = { broker: canon.name, count:0, cancel:0, reject:0, items:[], months:{}, bldg:{} };
+    const isCx = (kind === 'cancel'), isRj = (kind === 'reject'), ng = isCx || isRj;
     const ym = (when.sort && when.sort.length>=6 && when.sort.slice(4,6)!=='00') ? (when.sort.slice(0,4)+'-'+when.sort.slice(4,6)) : '';
-    if(cancel){ map[key].cancel++; }
+    if(isCx){ map[key].cancel++; }
+    else if(isRj){ map[key].reject++; }
     else {
       map[key].count++;
       if(ym){
@@ -11218,29 +11241,31 @@ function computeBrokerStats(){
     }
     // 全体の月別
     if(ym){
-      if(!monthAll[ym]) monthAll[ym] = { count:0, cancel:0 };
-      if(cancel) monthAll[ym].cancel++; else monthAll[ym].count++;
+      if(!monthAll[ym]) monthAll[ym] = { count:0, cancel:0, reject:0 };
+      if(isCx) monthAll[ym].cancel++; else if(isRj) monthAll[ym].reject++; else monthAll[ym].count++;
     }
     // 物件別（建物名 → 業者別件数。成約のみ）
-    if(building && !cancel){
+    if(building && !ng){
       if(!propMap[building]) propMap[building] = { building, count:0, brokers:{} };
       propMap[building].count++;
       propMap[building].brokers[canon.name] = (propMap[building].brokers[canon.name]||0) + 1;
     }
-    map[key].items.push({ property: propName, staff:(staff||'').trim(), when: when.disp, sort: when.sort, cancel: !!cancel });
+    map[key].items.push({ property: propName, staff:(staff||'').trim(), when: when.disp, sort: when.sort, cancel: ng, kind: (isCx?'cancel':(isRj?'reject':'ok')) });
     const yr = when.year || '不明';
-    if(!yearMap[yr]) yearMap[yr] = { count:0, cancel:0 };
-    if(cancel) yearMap[yr].cancel++; else yearMap[yr].count++;
+    if(!yearMap[yr]) yearMap[yr] = { count:0, cancel:0, reject:0 };
+    if(isCx) yearMap[yr].cancel++; else if(isRj) yearMap[yr].reject++; else yearMap[yr].count++;
   }
 
-  // 現在の契約カード
+  // 現在の契約カード（完了タブへ移動した確定分だけを集計する）
   Object.values(loadAll()).forEach(c => {
+    if(!c.archived) return;                    // 完了タブに入るまでは集計しない
     const broker = (c.broker || '').trim(); if(!broker) return;
     const w = brokerWhen(c);
     if(fyValid && w.year !== fy) return;
     const roomNo = c.room ? String(c.room).replace(/^P/i,'') : '';
     const bldg = (c.property||'(物件未入力)').trim();
-    add(broker, w, bldg + (roomNo ? ' '+roomNo+'号' : ''), bldg, c.staff, _isCancel(c.status));
+    add(broker, w, bldg + (roomNo ? ' '+roomNo+'号' : ''), bldg, c.staff,
+        (c.dealStatus === 'cancel') ? 'cancel' : (c.dealStatus === 'rejected') ? 'reject' : 'ok');
   });
 
   // PIVOT導入前の履歴（カード化しない分析専用データ）
@@ -11250,7 +11275,7 @@ function computeBrokerStats(){
     if(fyValid && w.year !== fy) return;
     const roomNo = h.room ? String(h.room).replace(/^P/i,'').replace(/\.0$/,'') : '';
     const bldg = (h.property||'(物件未入力)').trim();
-    add(broker, w, bldg + (roomNo ? ' '+roomNo+'号' : ''), bldg, h.staff, _isCancel(h.status));
+    add(broker, w, bldg + (roomNo ? ' '+roomNo+'号' : ''), bldg, h.staff, _cancelKind(h.status));
   });
 
   const rows = Object.values(map);
@@ -11261,25 +11286,35 @@ function computeBrokerStats(){
       .sort((a,b)=> b.count - a.count || a.name.localeCompare(b.name,'ja')).slice(0,3);
   });
   rows.sort((a,b)=> b.count - a.count || a.broker.localeCompare(b.broker,'ja'));
+  // 各業者の母数(=申込総数)と率を計算
+  rows.forEach(r => {
+    r.base = r.count + r.cancel + r.reject;
+    r.cancelRate = _rate(r.cancel, r.base);
+    r.rejectRate = _rate(r.reject, r.base);
+  });
   const total = rows.reduce((s,r)=>s+r.count,0);
   const totalCancel = rows.reduce((s,r)=>s+r.cancel,0);
+  const totalReject = rows.reduce((s,r)=>s+r.reject,0);
+  const totalBase = total + totalCancel + totalReject;
+  const cancelRate = _rate(totalCancel, totalBase);
+  const rejectRate = _rate(totalReject, totalBase);
   // 年別サマリー（新しい年順）
   const years = Object.keys(yearMap).filter(y=>y!=='不明').sort((a,b)=>b.localeCompare(a))
-    .map(y=>({ year:y, count:yearMap[y].count, cancel:yearMap[y].cancel }));
+    .map(y=>({ year:y, count:yearMap[y].count, cancel:yearMap[y].cancel, reject:yearMap[y].reject }));
   // 月別（全体・古い順）
-  const monthsAll = Object.keys(monthAll).sort().map(ym=>({ ym, count:monthAll[ym].count, cancel:monthAll[ym].cancel }));
+  const monthsAll = Object.keys(monthAll).sort().map(ym=>({ ym, count:monthAll[ym].count, cancel:monthAll[ym].cancel, reject:monthAll[ym].reject }));
   // 物件別ランキング（件数順）：各物件 → 業者別内訳
   const props = Object.values(propMap).map(p=>{
     const brokers = Object.keys(p.brokers).map(b=>({ broker:b, count:p.brokers[b] }))
       .sort((a,b)=> b.count - a.count || a.broker.localeCompare(b.broker,'ja'));
     return { building:p.building, count:p.count, brokers };
   }).sort((a,b)=> b.count - a.count || a.building.localeCompare(b.building,'ja'));
-  return { rows, fyValid, fy, total, totalCancel, years, monthsAll, props };
+  return { rows, fyValid, fy, total, totalCancel, totalReject, totalBase, cancelRate, rejectRate, years, monthsAll, props };
 }
 let _brokerStatMode = 'broker'; // 'broker' | 'property'
 function setBrokerStatMode(m){ _brokerStatMode = m; renderBrokerStats(); }
 function renderBrokerStats(){
-  const { rows, fyValid, fy, total, totalCancel, years, monthsAll, props: propRanking } = computeBrokerStats();
+  const { rows, fyValid, fy, total, totalCancel, totalReject, totalBase, cancelRate, rejectRate, years, monthsAll, props: propRanking } = computeBrokerStats();
   const _now = new Date();
   const THIS_YM = _now.getFullYear() + '-' + String(_now.getMonth()+1).padStart(2,'0'); // 今月 YYYY-MM
   const body = document.getElementById('bstat-body');
@@ -11301,8 +11336,11 @@ function renderBrokerStats(){
       ? '<div class="bstat-chip">🏢 業者 <b>' + rows.length + '</b> 社</div>'
       : '<div class="bstat-chip">🏠 物件 <b>' + propRanking.length + '</b> 件</div>') +
     '<div class="bstat-chip">✍️ 客付 <b>' + total + '</b> 件</div>' +
-    (totalCancel ? '<div class="bstat-chip bstat-chip-cx">🚫 キャンセル <b>' + totalCancel + '</b> 件</div>' : '') +
-    '</div>';
+    '<div class="bstat-chip bstat-chip-cx">🚫 キャンセル <b>' + totalCancel + '</b> 件 / <b>' + cancelRate + '</b></div>' +
+    '<div class="bstat-chip bstat-chip-rj">📕 審査落ち <b>' + totalReject + '</b> 件 / <b>' + rejectRate + '</b></div>' +
+    '<div class="bstat-chip">🧮 申込総数 <b>' + totalBase + '</b> 件</div>' +
+    '</div>' +
+    '<div class="bstat-ratenote">率の母数は「成約＋キャンセル＋審査落ち」＝申込総数です。</div>';
 
   // ===== 物件別ビュー =====
   if(_brokerStatMode === 'property'){
@@ -11368,8 +11406,8 @@ function renderBrokerStats(){
     const medal = (i+1);
     const props = r.items.map(it =>
       '<div class="bstat-prop-row' + (it.cancel ? ' is-cancel' : '') + '">' +
-        '<span class="pdot">' + (it.cancel ? '🚫' : '●') + '</span>' +
-        '<span class="pname">' + esc(it.property) + (it.cancel ? ' <span class="cxtag">ｷｬﾝｾﾙ</span>' : '') + '</span>' +
+        '<span class="pdot">' + (it.kind === 'reject' ? '📕' : (it.cancel ? '🚫' : '●')) + '</span>' +
+        '<span class="pname">' + esc(it.property) + (it.kind === 'reject' ? ' <span class="cxtag rjtag">審査落ち</span>' : (it.cancel ? ' <span class="cxtag">ｷｬﾝｾﾙ</span>' : '')) + '</span>' +
         (it.staff ? '<span class="pstaff">' + esc(it.staff) + '</span>' : '') +
         '<span class="pwhen">' + esc(it.when) + '</span>' +
       '</div>'
@@ -11407,8 +11445,10 @@ function renderBrokerStats(){
         '<div class="bstat-name">' + esc(r.broker) + '</div>' +
         '<div class="bstat-badge"><span class="bnum">' + r.count + '</span><span class="blbl">件</span></div>' +
         (r.cancel ? '<div class="bstat-badge bstat-badge-cx" onclick="event.stopPropagation();KB.showBrokerCancels('+i+')" title="キャンセル分だけ表示"><span class="bnum">' + r.cancel + '</span><span class="blbl">ｷｬﾝｾﾙ</span></div>' : '') +
+        (r.reject ? '<div class="bstat-badge bstat-badge-rj" title="審査落ち"><span class="bnum">' + r.reject + '</span><span class="blbl">審査落ち</span></div>' : '') +
         '<span class="bstat-caret">▾</span>' +
       '</div>' +
+      '<div class="bstat-rate">申込 <b>' + r.base + '</b> 件　／　キャンセル率 <b class="rt-cx">' + r.cancelRate + '</b>　／　審査落ち率 <b class="rt-rj">' + r.rejectRate + '</b></div>' +
       top3html +
       monthChart +
       '<div class="bstat-props bstat-collapsed">' + props + '</div>' +
@@ -11501,7 +11541,8 @@ function exportBrokerStatsCsv(){
     return (now.getFullYear()-y)*12 + (now.getMonth()+1 - m);
   };
 
-  const header = ['順位','客付業者','全期間の客付け数','キャンセル数',
+  const header = ['順位','客付業者','成約数','キャンセル数','審査落ち数','申込総数',
+                  'キャンセル率','審査落ち率',
                   '最終客付け日','客付けなし(ヶ月)','広告おすすめ',
                   'よく客付けする物件Best3'];
   const lines = [header];
@@ -11515,7 +11556,8 @@ function exportBrokerStatsCsv(){
     const reco = (gap !== '' && gap >= 6) ? `★${gap}ヶ月ぶり掘り起こし` : '';
     const best3 = (r.top3||[]).map(t=>`${t.name}(${t.count})`).join(' / ');
     lines.push([
-      String(i+1), r.broker, String(r.count), String(r.cancel),
+      String(i+1), r.broker, String(r.count), String(r.cancel), String(r.reject||0), String(r.base||0),
+      String(r.cancelRate||'—'), String(r.rejectRate||'—'),
       fmtSort(lastSort), (gap===''?'':String(gap)), reco, best3
     ]);
   });
