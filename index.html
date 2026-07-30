@@ -807,6 +807,14 @@ body.tab-kanban .kb-toolbar { display:flex; }
     font-size: 13px; font-weight: 700; color: #444; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   }
   #bstat-body .bstat-chip b { font-size: 15px; color: #111; font-weight: 800; }
+  .arch-notice{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    background:#fffbeb;border:2px solid #f0c36d;border-radius:10px;
+    padding:11px 14px;margin:0 0 12px;font-size:13px;color:#7a5c14;line-height:1.6;}
+  .arch-notice .an-t b{color:#8a5a00;}
+  .arch-notice .an-btn{margin-left:auto;flex:none;border:0;border-radius:8px;
+    background:#8a5a00;color:#fff;font-size:12.5px;font-weight:700;
+    padding:8px 14px;cursor:pointer;font-family:inherit;}
+  .arch-notice .an-btn:hover{filter:brightness(1.1);}
   #bstat-body .bstat-chip-cx { border-color:#f3c6c6; color:#b23; }
   #bstat-body .bstat-chip-rj { border-color:#c9b6e8; color:#5b3a8e; }
   #bstat-body .bstat-chip-rj b { color:#5b3a8e; }
@@ -10435,17 +10443,35 @@ let _sortMode = 'manual'; // 'manual' | 'kana' | 'defect' | 'cdate'
 let _defectFilter = '';   // 手入力: 特定の不備項目で絞り込み
 
 // ====== レンダリング ======
+// CSVで保管済みの年（この年の完了は件数から外す）
+function archivedYears(){
+  try { return JSON.parse(localStorage.getItem('pv_csv_archived_years') || '[]'); }
+  catch(e){ return []; }
+}
+function markYearArchived(y){
+  const a = archivedYears();
+  if(!a.includes(String(y))) a.push(String(y));
+  localStorage.setItem('pv_csv_archived_years', JSON.stringify(a));
+}
+// 完了した年（完了タブへ移した日→契約日→申込日の順で判定）
+function doneYearOf(c){
+  const d = c.archivedAt || c.contractDate || c.applyDate || '';
+  const m = String(d).match(/^(\d{4})/);
+  return m ? m[1] : '';
+}
+
 function renderStats(){
   const list = Object.values(loadAll());
   const active = list.filter(c => !c.archived);
-  const total = list.length;
+  // 登録＝進行中のみ（完了タブへ移したものは含めない）
+  const total = active.length;
   // カードの状態色で集計(cardStatusと一致させる)
   const defect   = active.filter(c => cardStatus(c) === 'defect').length;
   const progress = active.filter(c => cardStatus(c) === 'progress').length;
   const almost   = active.filter(c => cardStatus(c) === 'almost').length;
-  // 完了 = 一覧上の完了カード(黄) + 完了タブへ移動済み(archived)
-  const complete = active.filter(c => cardStatus(c) === 'complete').length
-                 + list.filter(c => c.archived).length;
+  // 完了 = 完了タブへ移動済みのうち、CSV保管がまだの年のぶんだけ
+  const done = archivedYears();
+  const complete = list.filter(c => c.archived && !done.includes(doneYearOf(c))).length;
   const stats = [
     {lbl:'登録',     num:total,    cls:''},
     {lbl:'不備あり', num:defect,   cls:'warn'},
@@ -10456,6 +10482,62 @@ function renderStats(){
   document.getElementById('stats-bar').innerHTML = stats.map(s =>
     '<div class="stat-pill ' + s.cls + (s.lbl==='完了' ? ' clickable" onclick="KB.openDoneModal()"' : '"') + '><span class="num">' + s.num + '</span><span class="lbl">' + s.lbl + (s.lbl==='完了' ? ' ▸' : '') + '</span></div>'
   ).join('');
+  drawArchiveNotice();
+}
+
+/* =========================================================
+ *  年をまたいだ完了ぶんの保管をうながす案内
+ * ======================================================= */
+function pendingArchiveYear(){
+  const nowY = String(new Date().getFullYear());
+  const done = archivedYears();
+  const years = new Set();
+  Object.values(loadAll()).forEach(c => {
+    if(!c.archived) return;
+    const y = doneYearOf(c);
+    if(y && y < nowY && !done.includes(y)) years.add(y);
+  });
+  return Array.from(years).sort()[0] || '';   // 古い年から順に片付ける
+}
+function drawArchiveNotice(){
+  const y = pendingArchiveYear();
+  let bar = document.getElementById('arch-notice');
+  if(!y){ if(bar) bar.remove(); return; }
+  if(!bar){
+    bar = document.createElement('div');
+    bar.id = 'arch-notice';
+    bar.className = 'arch-notice';
+    const host = document.getElementById('stats-bar');
+    if(host && host.parentNode) host.parentNode.insertBefore(bar, host);
+    else document.body.insertBefore(bar, document.body.firstChild);
+  }
+  const n = Object.values(loadAll()).filter(c => c.archived && doneYearOf(c) === y).length;
+  bar.innerHTML =
+    '<div class="an-t"><b>' + y + '年の完了ぶん ' + n + '件 が残っています。</b>'
+    + 'CSVをダウンロードしてデータ保管してください。</div>'
+    + '<button class="an-btn" onclick="KB.archiveYearCsv(\'' + y + '\')">' + y + '年のCSVを保存して片付ける</button>';
+}
+// その年の完了ぶんをCSVで書き出し、完了件数から外す
+function archiveYearCsv(y){
+  const list = Object.values(loadAll()).filter(c => c.archived && doneYearOf(c) === y);
+  if(!list.length){ markYearArchived(y); renderStats(); return; }
+  const head = ['完了日','物件','部屋','契約者','種別','仲介業者','担当者','契約日','申込日','状況','メモ'];
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g,'""') + '"';
+  const rows = list.map(c => [
+    (c.archivedAt||'').slice(0,10), c.property||'', c.room||'', c.contractor||'',
+    c.type==='corp' ? '法人' : '個人', c.broker||'', c.staff||'',
+    c.contractDate||'', c.applyDate||'', c.dealStatus||'', (c.memo||'').replace(/\r?\n/g,' ')
+  ].map(q).join(','));
+  const csv = '\uFEFF' + head.map(q).join(',') + '\n' + rows.join('\n') + '\n';
+  const url = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  const a = document.createElement('a');
+  a.href = url; a.download = 'PIVOT完了契約_' + y + '年.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if(!confirm(y + '年の完了ぶん ' + list.length + '件 をCSVで保存しました。\n\n保管を済ませたものとして、完了件数から外してよろしいですか？')) return;
+  markYearArchived(y);
+  renderStats();
+  toast(y + '年ぶんを保管済みにしました');
 }
 
 function renderBoard(){
@@ -13206,6 +13288,8 @@ let _sheetOpenedAt = 0;
 
 
 ;window.KB = window.KB || {};
+try{window.KB.archiveYearCsv=archiveYearCsv;}catch(e){}
+try{window.KB.drawArchiveNotice=drawArchiveNotice;}catch(e){}
 try{window.KB.autoCompleteCheck=autoCompleteCheck;}catch(e){}
 try{window.KB.autoSave=autoSave;}catch(e){}
 try{window.KB.basicDone=basicDone;}catch(e){}
