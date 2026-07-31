@@ -743,6 +743,41 @@ body.tab-kanban .kb-toolbar { display:flex; }
     box-shadow: 0 5px 14px rgba(0,0,0,0.16);
   }
   #kb-view .sort-opt.active { background: #111; color: #fff; }
+  #kb-view #btn-view.on{ background:#111; color:#fff; }
+  /* 画面が狭いときは左寄せにして、画面外へはみ出さないようにする */
+  @media (max-width: 760px){
+    #kb-view .sort-dropdown{
+      right: auto; left: 0;
+      min-width: 200px; max-width: calc(100vw - 24px);
+      max-height: 70vh; overflow-y: auto;
+    }
+  }
+
+  /* ===== 一覧表示（列） ===== */
+  .lv-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch;
+    background:var(--surface); border:1px solid #e6e6ec; border-radius:14px; }
+  .lv-table{ width:100%; border-collapse:collapse; font-size:13px; min-width:820px; }
+  .lv-table th{ background:#f6f6f9; color:#5b6b80; font-size:11.5px; font-weight:700;
+    text-align:left; padding:10px 12px; border-bottom:1px solid #e6e6ec; white-space:nowrap; }
+  .lv-table td{ padding:11px 12px; border-bottom:1px solid #f0f0f4; vertical-align:middle; }
+  .lv-row{ cursor:pointer; }
+  .lv-row:hover{ background:#faf9ff; }
+  .lv-row:last-child td{ border-bottom:0; }
+  .lv-c{ text-align:center; white-space:nowrap; }
+  .lv-prop b{ font-size:14px; }
+  .lv-sub{ font-size:11.5px; color:#7a8699; margin-left:2px; }
+  .lv-badge{ display:inline-block; font-size:11px; font-weight:800; border-radius:999px;
+    padding:3px 10px; white-space:nowrap; }
+  .lv-badge.defect{ background:#ffe5e3; color:#c0392b; }
+  .lv-badge.progress{ background:#efe9ff; color:#6b3fd4; }
+  .lv-badge.almost{ background:#e7f8ee; color:#1f9254; }
+  .lv-badge.complete{ background:#fff5d6; color:#8a6d00; }
+  .lv-badge.arch{ background:#eef2f7; color:#5b6b80; }
+  .lv-prog{ white-space:nowrap; }
+  .lv-bar{ display:inline-block; width:76px; height:6px; border-radius:99px;
+    background:#eceaf3; overflow:hidden; vertical-align:middle; margin-right:6px; }
+  .lv-bar i{ display:block; height:100%; background:#6b3fd4; border-radius:99px; }
+  .lv-num{ font-size:11.5px; color:#7a8699; font-weight:700; }
   #kb-view .sort-opt.active:hover { background: #111; }
   /* 不備の手入力フィルタ */
   #kb-view .sort-filter { border-top: 1px solid #ececef; margin-top: 4px; padding: 8px 6px 4px; }
@@ -807,6 +842,10 @@ body.tab-kanban .kb-toolbar { display:flex; }
     font-size: 13px; font-weight: 700; color: #444; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   }
   #bstat-body .bstat-chip b { font-size: 15px; color: #111; font-weight: 800; }
+  .ct-card.archived{opacity:.92;}
+  .ct-archived{display:inline-block;background:#eef2f7;color:#5b6b80;border:1px solid #cbd5e1;
+    border-radius:999px;font-size:11px;font-weight:700;padding:2px 10px;margin:0 0 6px;}
+
   .arch-notice{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
     background:#fffbeb;border:2px solid #f0c36d;border-radius:10px;
     padding:11px 14px;margin:0 0 12px;font-size:13px;color:#7a5c14;line-height:1.6;}
@@ -1946,6 +1985,7 @@ body.tab-kanban .kb-toolbar { display:flex; }
         </div>
       </div>
     </div>
+    <button class="btn-sort" id="btn-view" onclick="KB.toggleViewMode()">一覧表示</button>
     <button class="btn-primary" onclick="KB.openSheet()">＋ 新規</button>
   </div>
   <div class="settings-wrap" id="logout-wrap" style="display:none;margin-left:auto;">
@@ -10460,6 +10500,14 @@ function doneYearOf(c){
   return m ? m[1] : '';
 }
 
+// 起動時に「一覧表示／カード表示」の文言をそろえる
+function syncViewBtn(){
+  const b = document.getElementById('btn-view');
+  if(!b) return;
+  b.textContent = (_viewMode === 'list') ? 'カード表示' : '一覧表示';
+  b.classList.toggle('on', _viewMode === 'list');
+}
+
 function renderStats(){
   const list = Object.values(loadAll());
   const active = list.filter(c => !c.archived);
@@ -10483,6 +10531,7 @@ function renderStats(){
     '<div class="stat-pill ' + s.cls + (s.lbl==='完了' ? ' clickable" onclick="KB.openDoneModal()"' : '"') + '><span class="num">' + s.num + '</span><span class="lbl">' + s.lbl + (s.lbl==='完了' ? ' ▸' : '') + '</span></div>'
   ).join('');
   drawArchiveNotice();
+  syncViewBtn();
 }
 
 /* =========================================================
@@ -10542,10 +10591,13 @@ function archiveYearCsv(y){
 
 function renderBoard(){
   const all = loadAll();
-  let list = Object.values(all).filter(c => !c.archived);
   const search = (document.getElementById('kb-search').value || '').trim().toLowerCase();
+  // 検索しているときは、完了タブへ移したぶんも探せるようにする
+  let list = Object.values(all).filter(c => search ? true : !c.archived);
   if(search){
     list = list.filter(c => ((c.property||'') + ' ' + (c.contractor||'') + ' ' + (c.staff||'') + ' ' + (c.broker||'')).toLowerCase().includes(search));
+    // 進行中を先に、完了は後ろへ
+    list.sort((a,b) => (a.archived?1:0) - (b.archived?1:0));
   }
   // 不備の手入力フィルタ: 入力した項目が不足しているカードだけ表示
   if(_defectFilter){
@@ -10560,7 +10612,7 @@ function renderBoard(){
   // 整列モード: 五十音順 / 不備順 / 契約日順 / 手動(保存順)
   if(_sortMode === 'kana'){
     list.sort((a,b) => (a.property||'').localeCompare((b.property||''), 'ja'));
-    board.innerHTML = '<div class="contract-grid" id="contract-grid">' + list.map(c => renderCard(c)).join('') + '</div>';
+    paintBoard(board, list);
     bindCardDrag();
     return;
   }
@@ -10572,7 +10624,7 @@ function renderBoard(){
       if(ra !== 0) return ra;
       return (a.property||'').localeCompare(b.property||'');
     });
-    board.innerHTML = '<div class="contract-grid" id="contract-grid">' + list.map(c => renderCard(c)).join('') + '</div>';
+    paintBoard(board, list);
     bindCardDrag();
     return;
   }
@@ -10586,7 +10638,7 @@ function renderBoard(){
       if(ka !== kb) return ka.localeCompare(kb);             // 契約日が早い順
       return (a.property||'').localeCompare(b.property||'');
     });
-    board.innerHTML = '<div class="contract-grid" id="contract-grid">' + list.map(c => renderCard(c)).join('') + '</div>';
+    paintBoard(board, list);
     bindCardDrag();
     return;
   }
@@ -10597,7 +10649,7 @@ function renderBoard(){
     if(oa !== ob) return oa - ob;
     return (a.updatedAt||'').localeCompare(b.updatedAt||'');
   });
-  board.innerHTML = '<div class="contract-grid" id="contract-grid">' + list.map(c => renderCard(c)).join('') + '</div>';
+  paintBoard(board, list);
   bindCardDrag();
 }
 
@@ -10783,6 +10835,56 @@ function updateSortButtons(){
     o.classList.toggle('active', o.dataset.mode === _sortMode);
   });
 }
+/* =========================================================
+ *  表示の切り替え（カード／一覧）
+ * ======================================================= */
+let _viewMode = (function(){ try{ return localStorage.getItem('pv_view_mode') || 'card'; }catch(e){ return 'card'; } })();
+function setViewMode(m){
+  _viewMode = (m === 'list') ? 'list' : 'card';
+  try{ localStorage.setItem('pv_view_mode', _viewMode); }catch(e){}
+  const b = document.getElementById('btn-view');
+  if(b){ b.textContent = (_viewMode === 'list') ? 'カード表示' : '一覧表示'; b.classList.toggle('on', _viewMode === 'list'); }
+  renderBoard();
+}
+function toggleViewMode(){ setViewMode(_viewMode === 'list' ? 'card' : 'list'); }
+
+function paintBoard(board, list){
+  if(_viewMode === 'list'){ board.innerHTML = renderListView(list); return; }
+  board.innerHTML = '<div class="contract-grid" id="contract-grid">' + list.map(c => renderCard(c)).join('') + '</div>';
+}
+
+// 列（テーブル）で表示する
+function renderListView(list){
+  const row = c => {
+    const st = cardStatus(c);
+    const prog = contractProgress(c);
+    const lbl = c.archived ? '完了タブ'
+      : (st === 'defect' ? '不備あり' : st === 'almost' ? 'もうすぐ' : st === 'complete' ? '完了' : '進行中');
+    const cls = c.archived ? 'arch' : st;
+    const roomNo = c.room ? String(c.room).replace(/^P/i,'') : '';
+    const pct = Math.round(prog.done / prog.total * 100);
+    return '<tr class="lv-row ' + cls + '" onclick="KB.onCardClick(event,\'' + c.id + '\')">'
+      + '<td class="lv-st"><span class="lv-badge ' + cls + '">' + lbl + '</span></td>'
+      + '<td class="lv-prop"><b>' + esc(c.property || '(物件未入力)') + '</b>'
+        + (c.tou ? ' <span class="lv-sub">' + esc(c.tou) + '棟</span>' : '')
+        + (roomNo ? ' <span class="lv-sub">' + esc(roomNo) + '号</span>' : '')
+        + (c.parking ? ' <span class="lv-sub">P' + esc(String(c.parking).replace(/^P[-\s]?/i,'')) + '</span>' : '')
+      + '</td>'
+      + '<td>' + esc(c.contractor || '') + '</td>'
+      + '<td class="lv-c">' + ((c.type === '法人') ? '法人' : '個人') + '</td>'
+      + '<td>' + esc(c.broker || '') + '</td>'
+      + '<td>' + esc(c.staff || '') + '</td>'
+      + '<td class="lv-c">' + (c.contractDate ? esc(c.contractDate.replace(/-/g,'/')) : '—') + '</td>'
+      + '<td class="lv-prog"><span class="lv-bar"><i style="width:' + pct + '%"></i></span>'
+        + '<span class="lv-num">' + prog.done + '/' + prog.total + '</span></td>'
+      + '</tr>';
+  };
+  return '<div class="lv-wrap"><table class="lv-table">'
+    + '<thead><tr><th>状態</th><th>物件</th><th>契約者</th><th>種別</th>'
+    + '<th>仲介業者</th><th>担当</th><th>契約日</th><th>進捗</th></tr></thead>'
+    + '<tbody>' + list.map(row).join('') + '</tbody></table></div>';
+}
+
 function renderCard(c){
   const curIdx = progressCurrentIndex(c);
   const cur = PROGRESS_STEPS[curIdx] || PROGRESS_STEPS[0];
@@ -10888,10 +10990,11 @@ function renderCard(c){
   const adText = (adNum === 0) ? 'ADなし' : ('AD' + esc(String(adNum)) + '%');
   const adLabelHtml = '<span class="ct-ad-label' + adCls + '">' + adText + '</span>';
 
-  return '<div class="ct-card status-' + status + (isDone ? ' done' : '') + '" data-id="' + c.id + '" draggable="true"' +
+  return '<div class="ct-card status-' + status + (isDone ? ' done' : '') + (c.archived ? ' archived' : '') + '" data-id="' + c.id + '" draggable="true"' +
     ' style="border-color:' + accent + ';"' +
     ' onclick="KB.onCardClick(event,\'' + c.id + '\')">' +
     '<button class="ct-card-del" title="この契約を削除" onclick="event.stopPropagation();KB.deleteCardContract(event,\'' + c.id + '\')">×</button>' +
+    (c.archived ? '<div class="ct-archived">完了タブ' + (c.archivedAt ? '（' + esc(c.archivedAt.slice(0,10).replace(/-/g,'/')) + '）' : '') + '</div>' : '') +
     '<div class="ct-head">' +
       '<span class="ct-head-left">' +
         '<span class="ct-type-label ct-type-' + ((c.type === '法人') ? 'corp' : 'indiv') + '">' + ((c.type === '法人') ? '法人' : '個人') + '</span>' +
@@ -13288,6 +13391,8 @@ let _sheetOpenedAt = 0;
 
 
 ;window.KB = window.KB || {};
+try{window.KB.toggleViewMode=toggleViewMode;}catch(e){}
+try{window.KB.setViewMode=setViewMode;}catch(e){}
 try{window.KB.archiveYearCsv=archiveYearCsv;}catch(e){}
 try{window.KB.drawArchiveNotice=drawArchiveNotice;}catch(e){}
 try{window.KB.autoCompleteCheck=autoCompleteCheck;}catch(e){}
