@@ -846,6 +846,9 @@ body.tab-kanban .kb-toolbar { display:flex; }
   .ct-archived{display:inline-block;background:#eef2f7;color:#5b6b80;border:1px solid #cbd5e1;
     border-radius:999px;font-size:11px;font-weight:700;padding:2px 10px;margin:0 0 6px;}
 
+  .ct-card, .lv-row, .btn-sort, .btn-primary, .stat-pill, .sort-opt{ touch-action: manipulation; }
+  input, textarea, select, button{ touch-action: manipulation; }
+
   .arch-notice{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
     background:#fffbeb;border:2px solid #f0c36d;border-radius:10px;
     padding:11px 14px;margin:0 0 12px;font-size:13px;color:#7a5c14;line-height:1.6;}
@@ -10990,7 +10993,8 @@ function renderCard(c){
   const adText = (adNum === 0) ? 'ADなし' : ('AD' + esc(String(adNum)) + '%');
   const adLabelHtml = '<span class="ct-ad-label' + adCls + '">' + adText + '</span>';
 
-  return '<div class="ct-card status-' + status + (isDone ? ' done' : '') + (c.archived ? ' archived' : '') + '" data-id="' + c.id + '" draggable="true"' +
+  var _touch = ('ontouchstart' in window);
+  return '<div class="ct-card status-' + status + (isDone ? ' done' : '') + (c.archived ? ' archived' : '') + '" data-id="' + c.id + '"' + (_touch ? '' : ' draggable="true"') +
     ' style="border-color:' + accent + ';"' +
     ' onclick="KB.onCardClick(event,\'' + c.id + '\')">' +
     '<button class="ct-card-del" title="この契約を削除" onclick="event.stopPropagation();KB.deleteCardContract(event,\'' + c.id + '\')">×</button>' +
@@ -13390,6 +13394,49 @@ let _sheetOpenedAt = 0;
 })();
 
 
+/* =========================================================
+ *  スマホの誤タップ対策
+ *  ・指が動いた（スワイプした）ときは、そのあとのタップを無効にする
+ *  ・スクロール直後のタップも無効にする（勢いを止めた指が反応するのを防ぐ）
+ *  ・触って操作する端末では、カードのドラッグ移動を切る
+ * ======================================================= */
+(function(){
+  if(!('ontouchstart' in window)) return;          // 触って操作する端末だけ
+  var sx = 0, sy = 0, moved = false, lastScroll = 0;
+  var MOVE = 12;        // これ以上動いたらスワイプとみなす（px）
+  var AFTER_SCROLL = 350;  // スクロールが止まってから、この時間はタップを無視（ミリ秒）
+
+  document.addEventListener('touchstart', function(e){
+    var t = e.touches && e.touches[0]; if(!t) return;
+    sx = t.clientX; sy = t.clientY; moved = false;
+  }, {passive:true, capture:true});
+
+  document.addEventListener('touchmove', function(e){
+    var t = e.touches && e.touches[0]; if(!t) return;
+    if(Math.abs(t.clientX - sx) > MOVE || Math.abs(t.clientY - sy) > MOVE) moved = true;
+  }, {passive:true, capture:true});
+
+  document.addEventListener('scroll', function(){ lastScroll = Date.now(); },
+    {passive:true, capture:true});
+
+  document.addEventListener('click', function(e){
+    var recent = (Date.now() - lastScroll) < AFTER_SCROLL;
+    if(!moved && !recent) return;                  // 素直なタップは通す
+    e.stopPropagation();
+    e.preventDefault();
+    // 入力欄に指が触れてキーボードが出るのも防ぐ
+    if(document.activeElement && document.activeElement.blur) {
+      try{ document.activeElement.blur(); }catch(_){}
+    }
+  }, true);
+
+  // 触って操作する端末では、カードのドラッグ移動を無効にする（スクロールと干渉するため）
+  document.addEventListener('DOMContentLoaded', function(){
+    var css = document.createElement('style');
+    css.textContent = '.ct-card{ -webkit-user-drag:none; }';
+    document.head.appendChild(css);
+  });
+})();
 ;window.KB = window.KB || {};
 try{window.KB.toggleViewMode=toggleViewMode;}catch(e){}
 try{window.KB.setViewMode=setViewMode;}catch(e){}
