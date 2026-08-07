@@ -4,9 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
 <title>PIVOT</title>
-<!-- Owner Mail(家賃明細送信)用 PDFライブラリ -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- つなぎ先を先に用意しておく（名前解決と接続の待ち時間を減らす） -->
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+
+<!-- Owner Mail(家賃明細送信)用 PDFライブラリ
+     defer を付けて後回しにする。合計1MB以上あり、これを待つ間ずっと画面が真っ白だった。
+     使うのは家賃明細の書き出しのときだけなので、先に読み込む必要がない。 -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <!-- ===== ホーム画面アプリ(iPhone/iPad)設定 ===== -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2978,7 +2987,9 @@ try {
     // ログイン維持: ブラウザを閉じても保持(次回から自動ログイン)。ログアウトで解除。
     try{
       if(firebase.auth && firebase.auth.Auth && firebase.auth.Auth.Persistence){
-        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION);
+        // LOCAL＝ブラウザを閉じても保持。SESSION だとタブを閉じるたびに再ログインになる。
+        // 「1時間操作なし／日付が変わったら再ログイン」の制限は isSessionExpired() 側で効いている。
+        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
       }
     }catch(e){ console.warn('persistence設定に失敗:', e); }
   }
@@ -3514,7 +3525,7 @@ async function autoPullOnStart(){
 // 起動時は自動で読み込まない。ログイン画面を出し、「ログイン」を押したときだけ最新を読み込む。
 // ただしログイン記憶がある場合は、入力画面を出さずに自動でログイン状態に入る。
 window.addEventListener('DOMContentLoaded', () => {
-  setTimeout(function(){
+  (function(){
     try{
       if(_firebaseReady && firebase.auth){
         var _booted = false;
@@ -3533,8 +3544,9 @@ window.addEventListener('DOMContentLoaded', () => {
             _booted = true;
             try{ var ex = document.getElementById('pivot-login'); if(ex) ex.remove(); }catch(e){}
             try{ recordLoginHistory(user.email); }catch(e){}
-            try{ await loginPull(); }catch(e){}
             try{ _pivotCurrentUser = user.email; updateLoginUserLabel(); markActivity(); }catch(e){}
+            showLocalFirst();     // 端末に残っている内容で、すぐ画面を出す
+            backgroundPull();     // 最新はうしろで取り込む（待たない）
           } else {
             // 未ログイン: 通常どおりログイン画面を表示
             _booted = true;
@@ -3547,7 +3559,7 @@ window.addEventListener('DOMContentLoaded', () => {
         showLoginScreen();
       }
     }catch(e){ showLoginScreen(); }
-  }, 200);
+  })();
 });
 window.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'hidden'){
@@ -3776,18 +3788,16 @@ function showLoginScreen(){
     msg.textContent = 'ログインを確認しています…';
     try{
       // ログイン記憶: 一度ログインすれば次回以降は入力不要(この端末・このブラウザで保持)
-      try{ await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION); }catch(e){}
+      try{ await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL); }catch(e){}
       // Firebaseでメール+パスワード認証
       const cred = await firebase.auth().signInWithEmailAndPassword(email, pass);
       const loggedInEmail = (cred && cred.user && cred.user.email) ? cred.user.email : email;
       // ログイン履歴を記録(失敗してもログインは続行)
       try{ recordLoginHistory(loggedInEmail); }catch(e){}
-      btn.textContent = '読み込み中…';
-      msg.textContent = 'クラウドから最新データを取得しています…';
-      await loginPull();
-      msg.textContent = '完了しました';
       try{ _pivotCurrentUser = loggedInEmail; updateLoginUserLabel(); markActivity(); }catch(e){}
-      ov.remove();
+      ov.remove();          // 待たずに画面を開く
+      showLocalFirst();     // 端末に残っている内容をすぐ表示
+      backgroundPull();     // 最新はうしろで取り込む
     }catch(e){
       const code = (e && e.code) ? e.code : '';
       if(code){
@@ -3837,7 +3847,22 @@ function showLoginScreen(){
 }
 
 // ログイン時のクラウド読込(クラウドのデータでローカルを置き換える)
-async function loginPull(){
+/* まず端末に残っている内容で画面を出し、最新はうしろで取り込む。
+   毎回クラウドの返事を待ってから画面を出していたため、開くのに時間がかかっていた。 */
+function showLocalFirst(){
+  try{ if(typeof renderAll === 'function') renderAll(); }catch(e){}
+  try{ if(window.KB && window.KB.renderAll) window.KB.renderAll(); }catch(e){}
+  try{ if(window.KT && window.KT.reload) window.KT.reload(); }catch(e){}
+}
+/* うしろで最新を取り込む。取り込み中に編集していたら、その内容を消さない。 */
+function backgroundPull(){
+  try{ setSyncStatus('loading', '☁️ 最新を確認中…'); }catch(e){}
+  return loginPull({ keepLocalEdits:true }).catch(function(){
+    try{ setSyncStatus('error', '⚠️ 最新の取り込みに失敗（端末の内容を表示中）'); }catch(e){}
+  });
+}
+
+async function loginPull(opt){
   const url = (typeof getCloudUrl === 'function') ? getCloudUrl() : '';
   if(!url) return;
   const r = await postToGas(url, { action:'load' });
@@ -3845,6 +3870,12 @@ async function loginPull(){
   const payload = r.payload || {};
   const buildings = payload.buildings || {};
   const contracts = payload.contracts || {};
+  // うしろで取り込んでいる間に編集していたら、その内容を消さずに送信側へ回す
+  if(opt && opt.keepLocalEdits && (_hasUnsavedChanges || _autoPushInFlight)){
+    try{ setSyncStatus('idle',''); }catch(e){}
+    try{ if(typeof pushNow === 'function') pushNow(); }catch(e){}
+    return;
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(buildings));
   localStorage.setItem('contract_kanban_v2', JSON.stringify(contracts));
   // 勤怠: クラウドが勤怠を保持していない(キー無し or 空)場合は、ローカルの勤怠を消さずに守る。
