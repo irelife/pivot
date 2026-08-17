@@ -1970,6 +1970,60 @@ body.tab-kanban .kb-toolbar { display:flex; }
   #rent-view .toast.show{opacity:1;}
 
 </style>
+<!-- ============================================================
+     スマホ表示の修正  pv-mobile-2026-08-16a
+     ・整列パネルが画面外へ出る
+     ・完了モーダルの文字が縦になる／削除ボタンが横スクロールしないと出ない
+     既存の指定は書き換えず、この1枚を後ろに足して上書きしています。
+     ============================================================ -->
+<style id="pv-mobile-fix">
+@media (max-width: 760px){
+
+  /* --- 整列パネル ------------------------------------------------
+     もともと右端そろえ(right:0)のため、ボタンより左へ開いて
+     画面外にはみ出していました。左端そろえに変えて幅を画面内に収めます。
+     ※既存の同種の指定は #kb-view 配下向けで、このパネルには当たっていません。 */
+  .kb-toolbar .sort-dropdown{
+    right: auto !important;
+    left: 0 !important;
+    min-width: 190px !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: 70vh !important;
+    overflow-y: auto !important;
+  }
+
+  /* --- 完了モーダル ---------------------------------------------- */
+  #kb-view .done-modal{ width: 96vw; max-height: 88vh; }
+  #kb-view .done-head{ padding: 14px; }
+  #kb-view .done-head h2{ font-size: 16px; }
+  #kb-view .done-body{ padding: 12px; }
+
+  /* 1行に詰め込まず2段に折り返します。
+     これで物件名が1文字ずつ縦に並ぶのを防ぎます。 */
+  #kb-view .done-item{
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    padding: 12px;
+  }
+  #kb-view .done-item .di-check{ order: 0; margin-right: 0 !important; }
+  #kb-view .done-item .di-main{
+    order: 1;
+    flex: 1 1 calc(100% - 34px);
+    min-width: 0;
+  }
+  #kb-view .done-item .di-title,
+  #kb-view .done-item .di-sub{
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  /* 日付とボタンは2段目へ。削除まで横スクロールなしで届きます。 */
+  #kb-view .done-item .di-date{ order: 2; flex: 1 1 auto; }
+  #kb-view .done-item .di-back{ order: 3; flex: 0 0 auto; }
+  #kb-view .done-item .di-del{ order: 4; flex: 0 0 auto; margin-left: 0 !important; }
+}
+</style>
 </head>
 <body>
 
@@ -10533,6 +10587,17 @@ function doneYearOf(c){
   const m = String(d).match(/^(\d{4})/);
   return m ? m[1] : '';
 }
+/* 完了した「年度」（4月始まり）。判定に使う日付の順番は doneYearOf と同じ。
+ * 件数・保管の案内・モーダルの絞り込みを、すべてこの年度でそろえます。 */
+function doneFiscalYearOf(c){
+  return fiscalYearOf(c.archivedAt || c.contractDate || c.applyDate || '');
+}
+/* いまの年度 */
+function currentFiscalYear(){
+  const n = new Date();
+  const y = n.getFullYear(), m = n.getMonth() + 1;
+  return String(m <= 3 ? y - 1 : y);
+}
 
 // 起動時に「一覧表示／カード表示」の文言をそろえる
 function syncViewBtn(){
@@ -10551,9 +10616,12 @@ function renderStats(){
   const defect   = active.filter(c => cardStatus(c) === 'defect').length;
   const progress = active.filter(c => cardStatus(c) === 'progress').length;
   const almost   = active.filter(c => cardStatus(c) === 'almost').length;
-  // 完了 = 完了タブへ移動済みのうち、CSV保管がまだの年のぶんだけ
-  const done = archivedYears();
-  const complete = list.filter(c => c.archived && !done.includes(doneYearOf(c))).length;
+  /* 完了 = 完了タブへ移動済みのうち、今年度ぶん。
+   * 年度が替わるまでは、CSVで保管しても件数から消えません。
+   * 前年度以前のぶんは、年度が替わった時点で自動的に外れます。
+   * （データは残っているので、完了タブの年度欄に年を入れれば見られます） */
+  const nowFY = currentFiscalYear();
+  const complete = list.filter(c => c.archived && doneFiscalYearOf(c) === nowFY).length;
   const stats = [
     {lbl:'登録',     num:total,    cls:''},
     {lbl:'不備あり', num:defect,   cls:'warn'},
@@ -10572,15 +10640,15 @@ function renderStats(){
  *  年をまたいだ完了ぶんの保管をうながす案内
  * ======================================================= */
 function pendingArchiveYear(){
-  const nowY = String(new Date().getFullYear());
+  const nowFY = currentFiscalYear();
   const done = archivedYears();
   const years = new Set();
   Object.values(loadAll()).forEach(c => {
     if(!c.archived) return;
-    const y = doneYearOf(c);
-    if(y && y < nowY && !done.includes(y)) years.add(y);
+    const y = doneFiscalYearOf(c);
+    if(y && y < nowFY && !done.includes(y)) years.add(y);
   });
-  return Array.from(years).sort()[0] || '';   // 古い年から順に片付ける
+  return Array.from(years).sort()[0] || '';   // 古い年度から順に片付ける
 }
 function drawArchiveNotice(){
   const y = pendingArchiveYear();
@@ -10594,15 +10662,15 @@ function drawArchiveNotice(){
     if(host && host.parentNode) host.parentNode.insertBefore(bar, host);
     else document.body.insertBefore(bar, document.body.firstChild);
   }
-  const n = Object.values(loadAll()).filter(c => c.archived && doneYearOf(c) === y).length;
+  const n = Object.values(loadAll()).filter(c => c.archived && doneFiscalYearOf(c) === y).length;
   bar.innerHTML =
-    '<div class="an-t"><b>' + y + '年の完了ぶん ' + n + '件 が残っています。</b>'
+    '<div class="an-t"><b>' + y + '年度の完了ぶん ' + n + '件 が残っています。</b>'
     + 'CSVをダウンロードしてデータ保管してください。</div>'
     + '<button class="an-btn" onclick="KB.archiveYearCsv(\'' + y + '\')">' + y + '年のCSVを保存して片付ける</button>';
 }
 // その年の完了ぶんをCSVで書き出し、完了件数から外す
 function archiveYearCsv(y){
-  const list = Object.values(loadAll()).filter(c => c.archived && doneYearOf(c) === y);
+  const list = Object.values(loadAll()).filter(c => c.archived && doneFiscalYearOf(c) === y);
   if(!list.length){ markYearArchived(y); renderStats(); return; }
   const head = ['完了日','物件','部屋','契約者','種別','仲介業者','担当者','契約日','申込日','状況','メモ'];
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g,'""') + '"';
@@ -10614,13 +10682,13 @@ function archiveYearCsv(y){
   const csv = '\uFEFF' + head.map(q).join(',') + '\n' + rows.join('\n') + '\n';
   const url = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
   const a = document.createElement('a');
-  a.href = url; a.download = 'PIVOT完了契約_' + y + '年.csv';
+  a.href = url; a.download = 'PIVOT完了契約_' + y + '年度.csv';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  if(!confirm(y + '年の完了ぶん ' + list.length + '件 をCSVで保存しました。\n\n保管を済ませたものとして、完了件数から外してよろしいですか？')) return;
+  if(!confirm(y + '年度の完了ぶん ' + list.length + '件 をCSVで保存しました。\n\n保管を済ませたものとして、案内を消してよろしいですか？\n※契約データは消えません。')) return;
   markYearArchived(y);
   renderStats();
-  toast(y + '年ぶんを保管済みにしました');
+  toast(y + '年度ぶんを保管済みにしました');
 }
 
 function renderBoard(){
@@ -11969,7 +12037,7 @@ function renderDoneList(){
   const yearInput = document.getElementById('done-year');
   const fy = yearInput ? String(yearInput.value||'').trim() : '';
   const fyValid = /^\d{4}$/.test(fy);
-  if(fyValid){ list = list.filter(c => fiscalYearOf(c.archivedAt) === fy); }
+  if(fyValid){ list = list.filter(c => doneFiscalYearOf(c) === fy); }
   list.sort((a,b) => (b.archivedAt||'').localeCompare(a.archivedAt||''));
   const body = document.getElementById('done-body');
   if(list.length === 0){
