@@ -2199,8 +2199,8 @@ body.tab-kanban .kb-toolbar { display:flex; }
   <div class="done-head">
     <h2>✅ 完了済み契約</h2>
     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-      <input type="text" id="done-year" inputmode="numeric" maxlength="4" placeholder="年度 例)2026"
-        oninput="KB.renderDoneList()" title="完了年度で絞り込み(4月始まり)。空欄で全年度"
+      <input type="text" id="done-year" inputmode="numeric" maxlength="4" placeholder="年 例)2026"
+        oninput="KB.renderDoneList()" title="完了した年で絞り込み(1月〜12月)。空欄で全期間"
         style="width:110px; border:1px solid #d9d4c7; background:#fff; color:#333; font-size:13px; font-weight:700; padding:7px 12px; border-radius:999px; font-family:inherit; text-align:center;">
       <button id="done-csv" onclick="KB.exportSelectedDoneCsv()" title="選択した契約をCSV出力"
         style="border:none; background:#e6efe7; color:#3f6b4c; font-size:13px; font-weight:800; padding:8px 14px; border-radius:999px; cursor:pointer; font-family:inherit; white-space:nowrap;">⬇ CSV出力</button>
@@ -10587,16 +10587,9 @@ function doneYearOf(c){
   const m = String(d).match(/^(\d{4})/);
   return m ? m[1] : '';
 }
-/* 完了した「年度」（4月始まり）。判定に使う日付の順番は doneYearOf と同じ。
- * 件数・保管の案内・モーダルの絞り込みを、すべてこの年度でそろえます。 */
-function doneFiscalYearOf(c){
-  return fiscalYearOf(c.archivedAt || c.contractDate || c.applyDate || '');
-}
-/* いまの年度 */
-function currentFiscalYear(){
-  const n = new Date();
-  const y = n.getFullYear(), m = n.getMonth() + 1;
-  return String(m <= 3 ? y - 1 : y);
+/* いまの年（1月〜12月で数えます） */
+function currentCountYear(){
+  return String(new Date().getFullYear());
 }
 
 // 起動時に「一覧表示／カード表示」の文言をそろえる
@@ -10616,12 +10609,12 @@ function renderStats(){
   const defect   = active.filter(c => cardStatus(c) === 'defect').length;
   const progress = active.filter(c => cardStatus(c) === 'progress').length;
   const almost   = active.filter(c => cardStatus(c) === 'almost').length;
-  /* 完了 = 完了タブへ移動済みのうち、今年度ぶん。
-   * 年度が替わるまでは、CSVで保管しても件数から消えません。
-   * 前年度以前のぶんは、年度が替わった時点で自動的に外れます。
-   * （データは残っているので、完了タブの年度欄に年を入れれば見られます） */
-  const nowFY = currentFiscalYear();
-  const complete = list.filter(c => c.archived && doneFiscalYearOf(c) === nowFY).length;
+  /* 完了 = 完了タブへ移動済みのうち、今年ぶん（1月〜12月）。
+   * 年が替わるまでは、CSVで保管しても件数から消えません。
+   * 前年以前のぶんは、年が替わった時点で自動的に外れます。
+   * （データは残っているので、完了タブの年の欄に入力すれば見られます） */
+  const nowY = currentCountYear();
+  const complete = list.filter(c => c.archived && doneYearOf(c) === nowY).length;
   const stats = [
     {lbl:'登録',     num:total,    cls:''},
     {lbl:'不備あり', num:defect,   cls:'warn'},
@@ -10640,15 +10633,15 @@ function renderStats(){
  *  年をまたいだ完了ぶんの保管をうながす案内
  * ======================================================= */
 function pendingArchiveYear(){
-  const nowFY = currentFiscalYear();
+  const nowY = currentCountYear();
   const done = archivedYears();
   const years = new Set();
   Object.values(loadAll()).forEach(c => {
     if(!c.archived) return;
-    const y = doneFiscalYearOf(c);
-    if(y && y < nowFY && !done.includes(y)) years.add(y);
+    const y = doneYearOf(c);
+    if(y && y < nowY && !done.includes(y)) years.add(y);
   });
-  return Array.from(years).sort()[0] || '';   // 古い年度から順に片付ける
+  return Array.from(years).sort()[0] || '';   // 古い年から順に片付ける
 }
 function drawArchiveNotice(){
   const y = pendingArchiveYear();
@@ -10662,15 +10655,15 @@ function drawArchiveNotice(){
     if(host && host.parentNode) host.parentNode.insertBefore(bar, host);
     else document.body.insertBefore(bar, document.body.firstChild);
   }
-  const n = Object.values(loadAll()).filter(c => c.archived && doneFiscalYearOf(c) === y).length;
+  const n = Object.values(loadAll()).filter(c => c.archived && doneYearOf(c) === y).length;
   bar.innerHTML =
-    '<div class="an-t"><b>' + y + '年度の完了ぶん ' + n + '件 が残っています。</b>'
+    '<div class="an-t"><b>' + y + '年の完了ぶん ' + n + '件 が残っています。</b>'
     + 'CSVをダウンロードしてデータ保管してください。</div>'
     + '<button class="an-btn" onclick="KB.archiveYearCsv(\'' + y + '\')">' + y + '年のCSVを保存して片付ける</button>';
 }
 // その年の完了ぶんをCSVで書き出し、完了件数から外す
 function archiveYearCsv(y){
-  const list = Object.values(loadAll()).filter(c => c.archived && doneFiscalYearOf(c) === y);
+  const list = Object.values(loadAll()).filter(c => c.archived && doneYearOf(c) === y);
   if(!list.length){ markYearArchived(y); renderStats(); return; }
   const head = ['完了日','物件','部屋','契約者','種別','仲介業者','担当者','契約日','申込日','状況','メモ'];
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g,'""') + '"';
@@ -10682,13 +10675,13 @@ function archiveYearCsv(y){
   const csv = '\uFEFF' + head.map(q).join(',') + '\n' + rows.join('\n') + '\n';
   const url = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
   const a = document.createElement('a');
-  a.href = url; a.download = 'PIVOT完了契約_' + y + '年度.csv';
+  a.href = url; a.download = 'PIVOT完了契約_' + y + '年.csv';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  if(!confirm(y + '年度の完了ぶん ' + list.length + '件 をCSVで保存しました。\n\n保管を済ませたものとして、案内を消してよろしいですか？\n※契約データは消えません。')) return;
+  if(!confirm(y + '年の完了ぶん ' + list.length + '件 をCSVで保存しました。\n\n保管を済ませたものとして、案内を消してよろしいですか？\n※契約データは消えません。')) return;
   markYearArchived(y);
   renderStats();
-  toast(y + '年度ぶんを保管済みにしました');
+  toast(y + '年ぶんを保管済みにしました');
 }
 
 function renderBoard(){
@@ -12037,12 +12030,12 @@ function renderDoneList(){
   const yearInput = document.getElementById('done-year');
   const fy = yearInput ? String(yearInput.value||'').trim() : '';
   const fyValid = /^\d{4}$/.test(fy);
-  if(fyValid){ list = list.filter(c => doneFiscalYearOf(c) === fy); }
+  if(fyValid){ list = list.filter(c => doneYearOf(c) === fy); }
   list.sort((a,b) => (b.archivedAt||'').localeCompare(a.archivedAt||''));
   const body = document.getElementById('done-body');
   if(list.length === 0){
     body.innerHTML = '<div class="done-empty">' +
-      (fyValid ? (fy + '年度に完了した契約はありません。')
+      (fyValid ? (fy + '年に完了した契約はありません。')
                : (fy ? '年度は4桁の数字で入力してください（例: 2026）。' : 'まだ完了タブに移動した契約はありません。')) + '</div>';
     updateDoneSelCount();
     return;
