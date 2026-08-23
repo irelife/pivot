@@ -1,0 +1,1589 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CRM 返信の承認</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* ---- B案：実務ダッシュボード ----
+   * 数字で滞留を見せ、行を詰めて一覧性を上げる配色。
+   * 色は「状態」にだけ使い、それ以外は無彩色で静かに保ちます。 */
+  --ink:#16181d;
+  --ink-2:#5f6570;
+  --ink-3:#8b909a;
+  --paper:#f4f5f7;
+  --card:#ffffff;
+  --g1:#eef0f3;
+  --g2:#dfe2e7;
+  --g3:#c9ced6;
+  --line:#e3e6ea;
+  --line-2:#eef0f3;
+  --accent:#3350c9;
+  --accent-d:#263a9c;
+  --late:#c2352a;
+  --warn:#a8690c;
+  --warn-bar:#e0a33c;
+  --bd:1px solid var(--g2);
+  --sh:0 1px 2px rgba(22,24,29,.04);
+  --sh-lift:0 2px 8px rgba(22,24,29,.09);
+  --r:5px;
+  --r-sm:4px;
+  --radius:5px;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:"BIZ UDPGothic","Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,sans-serif;
+  font-size:14px; line-height:1.75; font-weight:400;
+  padding-bottom:env(safe-area-inset-bottom);
+  -webkit-font-smoothing:antialiased;
+}
+button,input,textarea{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:760px;margin:0 auto;padding:0 0 60px}
+
+/* ---- 見出し ---- */
+header{
+  position:sticky; top:0; z-index:10;
+  background:rgba(255,255,255,.96);
+  -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+  margin-bottom:0;
+}
+.hd{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:11px 14px 10px}
+h1{font-size:14px;margin:0;letter-spacing:.02em;font-weight:700;flex:1}
+.badge{
+  font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;letter-spacing:.04em;
+  background:#fdf7ea;color:var(--warn);border:1px solid #e6d3ad;white-space:nowrap;
+}
+.badge.live{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* いま何件たまっているか。まずこれを見せます */
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line-2)}
+.stat{display:flex;flex-direction:column;gap:1px;padding:9px 14px;border-right:1px solid var(--line-2)}
+.stat:last-child{border-right:0}
+.stat .v{font-family:var(--mono);font-size:22px;font-weight:500;line-height:1.1;letter-spacing:-.02em}
+.stat .v.late{color:var(--late)}
+.stat .v.muted{color:var(--ink-2)}
+.stat .k{font-size:10.5px;color:var(--ink-2);line-height:1.4}
+
+.count{font-size:12px;color:var(--ink-2);padding:0 14px 9px}
+.count:empty{display:none}
+.buildtag{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);
+  letter-spacing:.02em;padding:10px 14px 14px}
+
+/* ---- タブ ---- */
+.tabs{display:flex;gap:0;margin:0;background:#fff;border-bottom:1px solid var(--line)}
+.tab{padding:0 15px;height:42px;border:0;border-radius:0;
+  background:transparent;font-size:13px;font-weight:400;color:var(--ink-2);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;
+  box-shadow:inset 0 -2px 0 transparent;
+  transition:color .15s,box-shadow .15s}
+.tab:hover{color:var(--ink)}
+.tab.on{background:transparent;color:var(--ink);font-weight:700;
+  box-shadow:inset 0 -2px 0 var(--accent)}
+.tab-n{font-family:var(--mono);font-size:11px;font-weight:400;padding:0;
+  border-radius:0;background:transparent;color:var(--ink-3)}
+.tab.on .tab-n{background:transparent;color:var(--accent);font-weight:500}
+
+/* ---- 用件でしぼる ---- */
+.filters{display:flex;gap:6px;overflow-x:auto;margin:0;
+  padding:9px 14px;background:var(--paper);border-bottom:1px solid var(--line);
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.filters:empty{display:none}
+/* ★2026-08-23：PCではフィルターを折り返します。
+ *   横スクロールにしていましたが、スクロールバーを隠しているため
+ *   マウスでは動かせず、右端の分類が見えなくなっていました。
+ *   指で払えるスマホ（640px以下）は、これまでどおり横スクロールです。 */
+@media (min-width: 641px) {
+  .filters{flex-wrap:wrap;overflow-x:visible}
+}
+.fchip{flex:none;border:var(--bd);background:#fff;border-radius:var(--r-sm);
+  padding:0 9px;height:26px;font-size:11px;font-weight:400;color:var(--ink-2);
+  cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;
+  transition:background .15s,color .15s,border-color .15s}
+.fchip:hover{color:var(--ink);border-color:var(--g3)}
+.fchip.on{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:700}
+.fchip .fn{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--ink-3);opacity:1}
+.fchip.on .fn{color:#ffffffa8}
+
+/* ---- 一覧 ----
+ * 1件を1行として詰めます。左端の色は急ぎの度合いです。 */
+#list{background:#fff}
+.card{
+  position:relative;
+  background:var(--card); border:0; border-bottom:1px solid var(--line-2); border-radius:0;
+  padding:11px 14px 11px 17px; margin:0; cursor:pointer;
+  box-shadow:none; transition:background .14s;
+}
+.card::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--g3);
+}
+.card:hover,.card:focus-visible{background:#fafbfc;box-shadow:none;transform:none;outline:none}
+.card:focus-visible{box-shadow:inset 0 0 0 2px var(--accent)}
+.card-top{display:flex;align-items:center;gap:7px;margin-bottom:3px;flex-wrap:wrap}
+.card-sub{display:flex;align-items:baseline;gap:7px;margin-bottom:3px;flex-wrap:wrap}
+/* 用件（なければ物件名）。行のなかで一番目に入るもの */
+.hl{flex:1 1 auto;font-size:14px;font-weight:700;letter-spacing:.01em;color:var(--ink);
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kind{
+  font-size:10px;font-weight:700;padding:2px 5px;border-radius:3px;
+  background:var(--g1);color:var(--ink-2);white-space:nowrap;
+}
+.kind.soudan{background:var(--ink);color:#fff}
+.topic{
+  font-size:10px;font-weight:700;padding:2px 5px;border-radius:3px;
+  background:#fff;border:1px solid var(--g2);color:var(--ink-2);white-space:nowrap;
+}
+.topic.manual{background:#fdf7ea;border-color:#e6d3ad;color:var(--warn)}
+/* ★送信前に人の作業が必ず要る案件（crmList.gs の tmplMark）
+ *   要添付 … 請求書などの添付。忘れると「添付いたしました」が嘘になります
+ *   要編集 … 該当しない会社を消す。忘れると2社ぶんの案内が並びます */
+.topic.attach{background:#fdecec;border-color:#e8b4b4;color:var(--late)}
+.topic.edit{background:#eef3fb;border-color:#b9cbe6;color:#3a63a8}
+.bldg{font-weight:400;font-size:11px;color:var(--ink-2);min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.time{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);white-space:nowrap}
+.snip{
+  font-size:12px;color:var(--ink-2);margin:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.55;
+}
+
+/* 経過日数：等幅なので桁が揃います */
+.days{font-family:var(--mono);font-size:11.5px;font-weight:500;padding:0;
+  margin-left:auto;border-radius:0;white-space:nowrap;background:transparent;color:var(--ink-3)}
+.days.fresh{background:transparent;color:var(--ink-3)}
+.days.warn{background:transparent;color:var(--warn)}
+.days.late{background:transparent;color:var(--late)}
+.days.making{background:transparent;color:var(--ink-3);border:0;font-family:inherit;font-size:11px}
+
+.card.late::before{background:var(--late)}
+.card.warn::before{background:var(--warn-bar)}
+.card.making{opacity:1;background:#f9fafb}
+.card.making::before{background:var(--g2)}
+.card.making .hl{color:var(--ink-3)}
+.card.making .snip{font-style:normal;color:var(--ink-3)}
+.card.done{background:#fff;box-shadow:none;opacity:1}
+.card.done::before{background:var(--g2)}
+.card.done .hl{color:var(--ink-2);font-weight:400}
+.sent{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);white-space:nowrap;
+  background:transparent;padding:0;border-radius:0;margin-left:auto}
+
+/* ---- 詳細 ---- */
+.sec{margin-bottom:18px}
+.sec>h2{
+  font-size:10.5px;font-weight:700;color:var(--ink-2);
+  margin:0 0 7px;letter-spacing:.1em;
+}
+.box{
+  background:var(--card);border:var(--bd);border-radius:var(--r);padding:12px 13px;
+  white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.8;
+  box-shadow:none;
+}
+.box.quiet{background:#fbfbfc;color:var(--ink-2);font-size:13px}
+.meta{font-size:11px;color:var(--ink-2);margin:0 0 2px}
+.meta b{color:var(--ink);font-weight:700;font-size:12px}
+/* 受信日時が途中で折り返すと読めないので、ひとかたまりにします */
+.meta .nw{white-space:nowrap}
+/* 件名がこの画面の見出しです */
+#dSubject{font-size:15.5px;font-weight:700;color:var(--ink);line-height:1.55;margin:5px 0 0}
+
+textarea{
+  width:100%;min-height:250px;padding:13px 14px;
+  background:#fbfbfc;border:var(--bd);border-radius:var(--r);
+  font-size:16px;line-height:1.9;color:var(--ink);font-weight:400;resize:vertical;
+  box-shadow:none;transition:border-color .16s,background .16s;
+}
+textarea:focus{outline:none;border-color:var(--accent);background:#fff;box-shadow:none}
+textarea.order{min-height:70px;font-size:16px;line-height:1.7}
+
+/* ---- ボタン ---- */
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;
+  padding-top:13px;border-top:1px solid var(--line)}
+button.act{
+  font-size:13px;font-weight:400;padding:0 15px;height:44px;border-radius:var(--r-sm);
+  border:var(--bd);background:#fff;color:var(--ink-2);cursor:pointer;box-shadow:none;
+  transition:border-color .16s,color .16s,background .16s;
+}
+button.act:hover{border-color:var(--g3);color:var(--ink);box-shadow:none;transform:none}
+button.act:active{transform:none}
+button.act:disabled{opacity:.4;cursor:default;box-shadow:none;transform:none}
+button.send{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:700;
+  font-size:14px;flex:1;min-width:150px}
+button.send:hover{background:#000;border-color:#000;color:#fff}
+button.send.armed{background:#fff;color:var(--late);border:1px dashed var(--late)}
+button.skip{background:#fff;border-color:var(--g2);color:var(--ink-2)}
+/* ★送信して返事待ち。完了と見分けが付くよう、白抜きにしています */
+button.send.wait{background:#fff;border-color:var(--ink);color:var(--ink)}
+button.send.wait:hover{background:var(--g1);border-color:#000;color:#000}
+/* ★返事待ちの残り日数 */
+.days.wleft{color:var(--ink-2)}
+.days.wsoon{color:var(--late);font-weight:700}
+.act.ai{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700}
+.act.ai:hover{background:var(--accent-d);border-color:var(--accent-d);color:#fff}
+.order-acts{display:flex;align-items:center;gap:11px;margin-top:9px;flex-wrap:wrap}
+.order-note{font-size:11.5px;color:var(--ink-2)}
+
+/* ---- 通知 ---- */
+.toast{
+  position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);
+  background:var(--ink);color:#fff;font-size:13px;font-weight:700;
+  padding:10px 18px;border-radius:var(--r);z-index:80;box-shadow:var(--sh-lift);
+  max-width:90vw;text-align:center;opacity:0;pointer-events:none;transition:opacity .18s;
+}
+.toast.on{opacity:1}
+.toast.bad{background:#fff;color:var(--late);border:1px solid var(--late)}
+
+/* ---- 結果表示 ---- */
+.status{
+  margin-top:13px;padding:11px 13px;border-radius:var(--r);
+  font-size:12.5px;line-height:1.7;border:var(--bd);background:#fff;
+  white-space:pre-wrap;word-break:break-word;box-shadow:none;
+}
+.status .stamp{display:block;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:3px}
+.status.ok{background:#f2f6f3;color:#2f5d43;border-color:#c8ddd0}
+.status.ok .stamp{color:#6d9481}
+.status.bad{background:#fdf3f2;border-color:#e6c2be;color:var(--late)}
+.status.work{background:var(--g1);color:var(--ink-2)}
+
+.empty{text-align:center;color:var(--ink-2);padding:46px 20px;font-size:12.5px;background:#fff}
+.hide{display:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ---- 添付ファイル ---- */
+.att-note{font-weight:400;font-size:10.5px;color:var(--ink-3);margin-left:7px}
+.att{display:flex;flex-direction:column;gap:9px}
+.att-pick{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;
+  padding:0 12px;height:36px;border:1px dashed var(--g3);border-radius:var(--r-sm);box-shadow:none;
+  background:#fff;font-size:12px;font-weight:400;color:var(--accent);cursor:pointer;user-select:none}
+.att-pick:hover{box-shadow:none;border-color:var(--accent);background:#fbfbfc}
+.att-pick::before{content:"＋";font-size:13px;line-height:1}
+.att-pick.busy{opacity:.5;pointer-events:none}
+.att-list{display:flex;flex-direction:column;gap:6px}
+.att-row{display:flex;align-items:center;gap:9px;padding:0 11px;height:36px;
+  border:var(--bd);border-radius:var(--r-sm);background:#fbfbfc;font-size:11.5px}
+.att-row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400}
+.att-row .sz{font-family:var(--mono);color:var(--ink-3);font-size:10.5px;flex:none}
+.att-row .rm{flex:none;border:none;background:transparent;color:var(--ink-2);
+  font-size:11.5px;cursor:pointer;padding:2px 4px;text-decoration:underline}
+.att-row .rm:hover{color:var(--late)}
+.att-empty{color:var(--ink-3);font-size:11.5px}
+
+/* ---- 原文 ---- */
+.rawbox{margin-top:8px}
+.rawbox>summary{cursor:pointer;font-size:12px;color:var(--accent);padding:5px 2px;list-style:none}
+.rawbox>summary::-webkit-details-marker{display:none}
+.rawbox>summary::before{content:"▸ ";color:var(--g3)}
+.rawbox[open]>summary::before{content:"▾ "}
+.box.raw{max-height:340px;overflow-y:auto;font-size:11.5px;line-height:1.7;
+  white-space:pre-wrap;margin-top:6px}
+
+/* ---- やりとりの履歴 ---- */
+.th-note{font-weight:400;font-size:10.5px;color:var(--ink-3);margin-left:7px}
+.thread{display:flex;flex-direction:column;gap:9px;max-height:420px;overflow-y:auto;
+  padding:12px 13px;border:var(--bd);border-radius:var(--r);background:#fbfbfc}
+.thread.empty-wrap{padding:12px 13px;background:#fff}
+.th-row{display:flex;flex-direction:column;max-width:100%;width:100%}
+.th-row.in{align-self:stretch;align-items:stretch}
+.th-row.out,.th-row.draft{align-self:stretch;align-items:stretch}
+.th-who{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin:0 0 3px}
+.th-bub{padding:0 0 0 10px;border-radius:0;font-size:12.5px;line-height:1.75;
+  white-space:pre-wrap;word-break:break-word;background:transparent;border:0;
+  border-left:2px solid var(--g2)}
+.th-row.in .th-bub{border-radius:0;color:var(--ink-2)}
+.th-row.out .th-bub{background:transparent;color:var(--ink);border-color:var(--accent);
+  border-radius:0}
+.th-row.out .th-who{color:var(--accent)}
+.th-row.draft .th-bub{background:transparent;color:var(--ink);
+  border-left:2px dashed var(--accent);border-radius:0}
+.th-row.cur .th-bub{box-shadow:none;background:#fff}
+.th-more{border:none;background:transparent;color:var(--accent);font-size:11px;
+  cursor:pointer;padding:2px 4px;align-self:flex-start;margin-top:2px;text-decoration:underline}
+.th-empty{color:var(--ink-3);font-size:11.5px}
+
+/* ---- 送信前プレビュー ---- */
+.prev summary{font-size:12px;font-weight:400;cursor:pointer;color:var(--accent);
+  padding:9px 12px;border:var(--bd);border-radius:var(--r);background:#fff;list-style:none}
+.prev summary::-webkit-details-marker{display:none}
+.prev summary::before{content:"▸ ";color:var(--g3)}
+.prev[open] summary::before{content:"▾ "}
+.prev[open] summary{margin-bottom:8px}
+
+/* ---- 営業タブ ---- */
+.card.eigyou{background:#fff;box-shadow:none;cursor:default;padding-bottom:13px}
+.card.eigyou::before{background:var(--g2)}
+.card.eigyou .bldg{color:var(--ink);font-weight:700;font-size:13px}
+.flag{font-size:10px;font-weight:700;padding:2px 5px;border-radius:3px;
+  background:var(--ink);color:#fff;white-space:nowrap}
+.flag.doubt{background:#fdf7ea;color:var(--warn);border:1px solid #e6d3ad}
+.reason{font-size:10.5px;color:var(--ink-3);margin:6px 0 0;line-height:1.6}
+.unbtn{margin-top:9px;padding:0 12px;height:32px;border:var(--bd);
+  border-radius:var(--r-sm);background:#fff;font-size:11.5px;font-weight:400;
+  color:var(--accent);cursor:pointer}
+.unbtn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.eigyou-note{font-size:11.5px;color:var(--ink-2);line-height:1.7;
+  padding:11px 13px;border-bottom:1px solid var(--line);
+  background:#fbfbfc;margin-bottom:0}
+
+/* ============================================================
+ *  広い画面では、そのまま横に伸ばします
+ * ============================================================ */
+@media (min-width: 780px) {
+  /* 画面が広いときは、一覧を紙のように1枚に見せます */
+  .wrap{background:#fff;min-height:100vh;
+    border-left:1px solid var(--line);border-right:1px solid var(--line)}
+  /* 数字は左に寄せます。横いっぱいに引き伸ばすと、かえって読みにくいためです */
+  .stats{grid-template-columns:repeat(3,minmax(0,150px))}
+  .stat:last-child{border-right:1px solid var(--line-2)}
+}
+@media (min-width: 1000px) {
+  .wrap{max-width:1040px}
+  #listView{width:auto}
+}
+
+/* ============================================================
+ *  1件を開くと、まん中に大きく出します
+ * ============================================================ */
+#detailView{
+  position:fixed;inset:0;z-index:55;overflow-y:auto;
+  padding:26px 20px 40px;
+  background:rgba(22,24,29,.34);
+  -webkit-backdrop-filter:blur(7px);
+  backdrop-filter:blur(7px);
+  animation:veilIn .16s ease-out;
+}
+#detailView.hide{display:none}
+.dcard{
+  max-width:880px;margin:0 auto;background:#fff;border-radius:8px;
+  padding:20px 22px 24px;box-shadow:0 20px 50px rgba(22,24,29,.26);
+  animation:zenIn .2s ease-out;
+}
+@media (max-width:640px){
+  #detailView{padding:0;background:#fff;-webkit-backdrop-filter:none;backdrop-filter:none}
+  .dcard{border-radius:0;box-shadow:none;padding:14px 14px 28px;min-height:100%}
+}
+/* 閉じるボタンは、開いている間ずっと右上に置いておきます */
+.back{
+  position:sticky;top:0;float:right;margin:0 0 4px 12px;z-index:2;
+  background:#fff;border:var(--bd);border-radius:var(--r-sm);padding:0 13px;height:34px;
+  color:var(--ink-2);font-size:12px;font-weight:400;cursor:pointer;box-shadow:none;
+}
+.back:hover{background:var(--g1);color:var(--ink);border-color:var(--g3)}
+
+/* ============================================================
+ *  集中編集
+ * ============================================================ */
+.veil{
+  position:fixed;inset:0;z-index:60;display:none;
+  background:rgba(22,24,29,.34);
+  -webkit-backdrop-filter:blur(7px);
+  backdrop-filter:blur(7px);
+  padding:22px;top:0;left:0;right:0;height:100%;
+}
+.veil[data-open="true"]{display:grid;place-items:center;animation:veilIn .16s ease-out}
+@keyframes veilIn{from{opacity:0}to{opacity:1}}
+.zen{width:min(960px,96vw);max-height:94vh;display:flex;flex-direction:column;
+  background:#fff;border-radius:8px;overflow:hidden;
+  box-shadow:0 20px 50px rgba(22,24,29,.3);animation:zenIn .2s ease-out}
+@keyframes zenIn{from{transform:translateY(12px);opacity:.6}to{transform:none;opacity:1}}
+.zen-head{display:flex;align-items:center;gap:11px;flex-wrap:wrap;
+  padding:12px 16px;background:var(--ink);color:#fff}
+.zen-head h3{margin:0;font-size:15px;font-weight:700}
+.zen-head .meta{font-size:10.5px;color:#ffffff9e;margin:0}
+.zen-close,.zen-peek{border:1px solid #ffffff5c;background:transparent;color:#fff;
+  padding:0 12px;height:30px;font-size:11.5px;font-weight:400;cursor:pointer;border-radius:var(--r-sm)}
+.zen-close{margin-left:auto}
+.zen-peek{display:none}
+.zen.kb .zen-peek{display:inline-block}
+.zen-close:hover,.zen-peek:hover{background:#fff;color:var(--ink)}
+.zen-ask{padding:12px 16px;border-bottom:1px solid var(--line);background:#fbfbfc;
+  max-height:26vh;overflow:auto}
+.zen-ask .cap{font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--ink-3);margin-bottom:5px}
+.zen-ask .body{font-size:13px;line-height:1.8;white-space:pre-wrap;word-break:break-word;
+  border-left:2px solid var(--g2);padding-left:11px;color:var(--ink-2)}
+.zen.kb .zen-ask{max-height:3.6em;padding:9px 16px}
+.zen.kb .zen-ask .cap{display:none}
+.zen.kb .zen-ask .body{font-size:12px;line-height:1.55}
+.zen.kb .zen-head .meta{display:none}
+.zen.ask-open .zen-ask{max-height:40vh}
+.zen-edit{flex:1;min-height:0;display:flex}
+.zen-edit textarea{flex:1;border:0;box-shadow:none;border-radius:0;min-height:0;height:100%;
+  background:#fff;font-size:16px;line-height:2;padding:18px 20px;resize:none}
+.zen-edit textarea:focus{box-shadow:none;outline:none;border:0;background:#fff}
+.zen-foot{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  padding:11px 16px;border-top:1px solid var(--line);background:#fbfbfc}
+.zen-foot .n{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--ink-3)}
+.zen-foot .r{margin-left:auto;display:flex;gap:8px}
+@media(max-width:640px){
+  .veil{padding:0}
+  .zen{width:100vw;max-height:100vh;height:100vh;border-radius:0;box-shadow:none}
+  .zen-foot .r{width:100%;margin-left:0}
+  .zen-foot .r .act{flex:1}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="hd">
+      <h1>CRM 返信の承認</h1>
+      <span class="badge" id="mode">確認中</span>
+    </div>
+    <!-- いま何件たまっているか。開いてすぐ目に入る場所に置きます -->
+    <div class="stats">
+      <div class="stat"><span class="v" id="sOpen">–</span><span class="k">未返信</span></div>
+      <div class="stat"><span class="v muted" id="sLate">–</span><span class="k">4日以上</span></div>
+      <div class="stat"><span class="v muted" id="sDone">–</span><span class="k">完了</span></div>
+    </div>
+    <div class="count" id="count"></div>
+  </header>
+
+  <!-- 一覧 -->
+  <div class="split" id="split">
+  <section id="listView">
+    <div class="tabs">
+      <button class="tab on" id="tabOpen" type="button">未返信<span class="tab-n" id="nOpen"></span></button>
+      <button class="tab" id="tabWait" type="button">返事待ち<span class="tab-n" id="nWait"></span></button>
+      <button class="tab" id="tabDone" type="button">完了<span class="tab-n" id="nDone"></span></button>
+      <button class="tab" id="tabEigyou" type="button">営業<span class="tab-n" id="nEigyou"></span></button>
+    </div>
+    <div class="filters" id="filters"></div>
+    <div id="list"></div>
+    <div class="buildtag" id="buildtag"></div>
+  </section>
+
+  <!-- 詳細 -->
+  <section id="detailView" class="hide">
+    <div class="dcard">
+    <button class="back" id="back">← 一覧にもどる</button>
+
+    <div class="sec">
+      <p class="meta" id="dMeta"></p>
+      <p class="meta" id="dSubject"></p>
+    </div>
+
+    <div class="sec">
+      <h2>今回の問い合わせ</h2>
+      <div class="box quiet" id="dContent"></div>
+      <details class="rawbox">
+        <summary>通知メールの原文を見る</summary>
+        <div class="box quiet raw" id="dRaw"></div>
+      </details>
+    </div>
+
+    <div class="sec" id="dThreadSec">
+      <h2>やりとりの履歴<span class="th-note" id="dThreadNote"></span></h2>
+      <div class="thread" id="dThread"></div>
+    </div>
+
+    <div class="sec">
+      <h2>返信の本文（ここを直せます）</h2>
+      <textarea id="dDraft" spellcheck="false"></textarea>
+    </div>
+
+    <div class="sec">
+      <h2>AIに書いてもらう<span class="att-note">どう返すかを一言で。文面はAIが整えます</span></h2>
+      <textarea id="dOrder" class="order" spellcheck="false"
+        placeholder="例：2番手申込の1番手確認への回答。1番手は審査中で、結果が出たら連絡すると伝えて。"></textarea>
+      <div class="order-acts">
+        <button class="act ai" id="bAi" type="button">この指示で書いてもらう</button>
+        <span class="order-note" id="dOrderNote"></span>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>添付ファイル<span class="att-note">請求書・領収書など。2件まで</span></h2>
+      <div class="att">
+        <label class="att-pick" for="dFile">ファイルを選ぶ</label>
+        <input type="file" id="dFile" accept=".pdf,application/pdf,image/*" hidden>
+        <div class="att-list" id="dFiles"></div>
+      </div>
+    </div>
+
+    <details class="sec prev" id="dPrevBox">
+      <summary>実際に送られる形を見る（宛名・署名つき）</summary>
+      <div class="box" id="dPreview"></div>
+    </details>
+
+    <div class="status hide" id="status"></div>
+
+    <div class="acts">
+      <button class="act" id="bSave">下書きを保存</button>
+      <button class="act skip" id="bSkip">完了にする</button>
+      <button class="act send wait" id="bSendWait">送信して返事待ち</button>
+      <button class="act send" id="bSend">送信して完了</button>
+    </div>
+    </div>
+  </section>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- 集中編集：返信本文をクリックすると開きます（ui-2026-08-19i） -->
+<div class="veil" id="veil" role="dialog" aria-modal="true" aria-label="返信本文の編集">
+  <div class="zen">
+    <div class="zen-head">
+      <h3 id="zenTitle">案件</h3>
+      <p class="meta" id="zenMeta"></p>
+      <button class="zen-peek" id="zenPeek" type="button">問い合わせ</button>
+      <button class="zen-close" id="zenClose" type="button">閉じる（Esc）</button>
+    </div>
+    <div class="zen-ask">
+      <div class="cap">今回の問い合わせ</div>
+      <div class="body" id="zenAsk"></div>
+    </div>
+    <div class="zen-edit"><textarea id="zenText" spellcheck="false"></textarea></div>
+    <div class="zen-foot">
+      <span class="n" id="zenCount">0 文字</span>
+      <div class="r">
+        <button class="act skip" id="zenBack" type="button">編集をやめる</button>
+        <button class="act send" id="zenOk" type="button">この内容にする</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+const API = "https://script.google.com/macros/s/AKfycbws85BB01CV2U4yJO6z3gHnH5ZjQp0rPviQ_XTpGR2c5p5uxJUKCwxz_M47y3TViLD1/exec";
+
+/* ---------- APIを呼ぶ（JSONP） ---------- */
+let jsonpSeq = 0;
+function api(params) {
+  return new Promise(function (resolve, reject) {
+    const cb = "__crm_cb_" + (++jsonpSeq) + "_" + Date.now();
+    const s  = document.createElement("script");
+    let done = false;
+
+    const timer = setTimeout(function () {
+      if (done) return;
+      cleanup();
+      reject(new Error("応答がありません。通信状況を確認してください"));
+    }, 25000);
+
+    function cleanup() {
+      done = true;
+      clearTimeout(timer);
+      delete window[cb];
+      if (s.parentNode) s.parentNode.removeChild(s);
+    }
+
+    window[cb] = function (data) { cleanup(); resolve(data); };
+
+    const q = Object.keys(params)
+      .map(function (k) { return k + "=" + encodeURIComponent(params[k]); })
+      .join("&");
+
+    s.src = API + "?" + q + "&callback=" + cb;
+    s.onerror = function () { if (!done) { cleanup(); reject(new Error("接続できません")); } };
+    document.head.appendChild(s);
+  });
+}
+
+/* ---------- 画面の部品 ---------- */
+const UI_BUILD = "ui-2026-08-23c";
+const $ = function (id) { return document.getElementById(id); };
+let cur  = null;
+let isTest = true;
+
+function toast(msg, bad) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "toast on" + (bad ? " bad" : "");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(function () { t.className = "toast"; }, 3200);
+}
+
+/* 結果を画面に残す。トーストと違い、自動では消えません */
+function setStatus(kind, msg) {
+  const el = $("status");
+  if (!kind) { el.className = "status hide"; el.textContent = ""; return; }
+  const d = new Date();
+  const hh = ("0" + d.getHours()).slice(-2), mm = ("0" + d.getMinutes()).slice(-2),
+        ss = ("0" + d.getSeconds()).slice(-2);
+  el.className = "status " + kind;
+  el.textContent = msg;
+  const t = document.createElement("span");
+  t.className = "stamp";
+  t.textContent = hh + ":" + mm + ":" + ss;
+  el.appendChild(t);
+}
+
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* ---------- 一覧 ---------- */
+let listOpen = [];
+let listWait = [];
+let listDone = [];
+let listTab  = "open";
+
+/* ★返事待ちの残り日数
+ *
+ *   waitLeft は crmList.gs が入れます。
+ *     2 … あと2日　0 … 今日が期限　null … 返事待ちではない
+ *   期限を過ぎた行は完了タブへ回るので、ここに負の数は来ません。 */
+function waitLabel(d) {
+  if (d === null || d === undefined) return "";
+  if (d === 0) return "本日期限";
+  return "あと" + d + "日";
+}
+function waitClass(d) {
+  if (d === null || d === undefined) return "wleft";
+  return (d <= 4) ? "wsoon" : "wleft";
+}
+
+function daysLabel(d) {
+  if (d === null || d === undefined) return "";
+  if (d === 0) return "本日";
+  return d + "日経過";
+}
+function daysClass(d) {
+  if (d === null || d === undefined) return "fresh";
+  if (d >= 4) return "late";
+  if (d >= 2) return "warn";
+  return "fresh";
+}
+
+
+/* ============================================================
+ *  用件を一言にする
+ *
+ *  一覧に並ぶのは返信案の書き出しですが、それだと
+ *  「お問い合わせいただきありがとうございます」ばかりが並び、
+ *  何の件なのかが分かりません。返信案から用件を拾って、
+ *  「名義変更」「保管場所使用承諾書」のように短く出します。
+ *
+ *  ★上から順に見て、最初に当たったものを使います。
+ *    駐車場より先に保管場所を見るなど、順番に意味があります。
+ * ============================================================ */
+const TOPICS = [
+  ["保管場所使用承諾書", ["保管場所", "車庫証明", "使用承諾", "車庫の証明"]],
+  ["名義変更",           ["名義変更", "名義の変更", "契約者変更", "契約者の変更", "契約者様の変更"]],
+  ["車両変更",           ["車両変更", "車両の変更", "車の変更", "車を変え", "車が変わ", "ナンバー変更", "お車のご変更"]],
+  ["無断駐車",           ["無断駐車", "迷惑駐車", "知らない車", "停められて"]],
+  ["駐車場",             ["駐車場", "駐車", "もう一台", "もう1台", "空き区画", "区画", "満車"]],
+  ["ペット",             ["ペット", "小型犬", "飼育", "飼っても", "飼いたい", "猫"]],
+  ["エアコン",           ["エアコン", "冷房", "暖房", "効かない"]],
+  ["インターネット",     ["インターネット", "Wi-Fi", "WiFi", "ｗｉ-ｆｉ", "wifi", "回線", "ネット環境"]],
+  ["ポスト・宅配BOX",    ["ポスト", "宅配", "暗証番号", "メールボックス", "ダイヤル"]],
+  ["ゴミ",               ["ゴミ", "ごみ", "分別"]],
+  ["騒音",               ["騒音", "うるさ", "音がする", "足音"]],
+  ["領収書",             ["領収書", "領収証"]],
+  ["解約・退去",         ["解約", "退去", "引っ越", "引越"]],
+  ["修繕",               ["修繕", "不具合", "水漏れ", "故障", "壊れ", "直して", "修理", "詰まり", "雨漏り"]],
+  ["鍵",                 ["鍵", "キーボックス", "開錠", "紛失"]],
+  ["内見",               ["内見", "内覧", "見学", "案内", "見に行"]],
+  ["空室確認",           ["空室", "空いて", "募集", "満室"]],
+  ["更新",               ["更新料", "契約更新", "更新の"]],
+  ["火災保険",           ["火災保険", "保険"]],
+  ["口座変更",           ["口座", "引落", "引き落と", "通帳", "振込先"]],
+];
+
+function topicOf(text) {
+  const t = String(text || "");
+  if (!t) return "";
+  for (let i = 0; i < TOPICS.length; i++) {
+    const keys = TOPICS[i][1];
+    for (let k = 0; k < keys.length; k++) {
+      if (t.indexOf(keys[k]) >= 0) return TOPICS[i][0];
+    }
+  }
+  return "";
+}
+
+function cardHtml(x, done, wait) {
+  const soudan = x.kind === "入居者相談" ? " soudan" : "";
+  /* 返信案がまだ無い行（未処理）は、作成中と分かるようにします。
+   * F列を消して作り直すとき、案件が消えたように見えないためです。 */
+  const snip   = x.making
+    ? "返信案を作っています…（10分ほどで並びます）"
+    : (x.content || x.draft || "").replace(/\s+/g, " ").slice(0, 90);
+  const cls    = (done || wait ? "done" : daysClass(x.days)) + (x.making ? " making" : "");
+  const topic  = topicOf(x.content);
+  /* ★返事待ちは、経過日数ではなく残り日数を出します。
+   *   こちらの作業は終わっていて、待っているのは相手の返事だからです。 */
+  const right  = wait
+    ? '<span class="days ' + waitClass(x.waitLeft) + '">' + esc(waitLabel(x.waitLeft)) + '</span>'
+    : done
+    ? '<span class="sent">' + esc(x.status) + (x.sentAt ? "　" + esc(x.sentAt) : "") + '</span>'
+    : (x.making
+        ? '<span class="days making">作成中</span>'
+        : '<span class="days ' + daysClass(x.days) + '">' + esc(daysLabel(x.days)) + '</span>');
+
+  const bldg = x.building || "物件名なし";
+  /* 行の先頭は用件です。用件を拾えなかったときだけ物件名を先頭に出します */
+  const head = topic || bldg;
+
+  return '<div class="card ' + cls + '" tabindex="0" data-row="' + x.rowNo + '">'
+       +   '<div class="card-top">'
+       +     '<span class="hl">' + esc(head) + '</span>'
+       +     '<span class="kind' + soudan + '">' + esc(x.kind || "未分類") + '</span>'
+       +     (x.manual ? '<span class="topic manual">要手入力</span>' : '')
+       +     (x.tmplMark
+               ? '<span class="topic ' + (x.tmplMark === "要添付" ? "attach" : "edit") + '">'
+                 + esc(x.tmplMark) + '</span>'
+               : '')
+       +     right
+       +   '</div>'
+       +   '<div class="card-sub">'
+       +     (topic ? '<span class="bldg">' + esc(bldg) + '</span>' : '')
+       +     '<span class="time">' + esc(x.received) + '</span>'
+       +   '</div>'
+       +   '<p class="snip">' + esc(snip) + '</p>'
+       + '</div>';
+}
+
+function eigyouCard(x) {
+  const cls = x.flag === "疑い" ? "doubt" : "";
+  return '<div class="card eigyou" data-row="' + x.rowNo + '">'
+       +   '<div class="card-top">'
+       +     '<span class="flag ' + cls + '">' + esc(x.flag) + '</span>'
+       +     '<span class="bldg">' + esc(x.subject || "（件名なし）") + '</span>'
+       +   '</div>'
+       +   '<div class="card-top"><span class="time">' + esc(x.received) + '　'
+       +     esc(x.from) + '</span></div>'
+       +   '<p class="snip">' + esc(x.content) + '</p>'
+       +   (x.reason ? '<p class="reason">判定の根拠：' + esc(x.reason) + '</p>' : "")
+       +   '<button class="unbtn" type="button">営業ではない（承認待ちに戻す）</button>'
+       + '</div>';
+}
+
+async function drawEigyou() {
+  $("tabOpen").className   = "tab";
+  $("tabDone").className   = "tab";
+  $("tabEigyou").className = "tab on";
+
+  $("list").innerHTML = '<div class="empty">読み込んでいます…</div>';
+  let rows = [];
+  try {
+    const r = await api({ mode: "eigyou" });
+    rows = (r && r.rows) || [];
+    $("nEigyou").textContent = rows.length;
+  } catch (e) {
+    $("list").innerHTML = '<div class="empty">読み込めませんでした</div>';
+    return;
+  }
+
+  const note = '<div class="eigyou-note">'
+    + '営業メールとして自動で弾いたものです。承認画面には出ていません。<br>'
+    + 'お客様からの問い合わせが混ざっていたら、下のボタンで戻してください。'
+    + '戻すと返信案が作られ、承認待ちに並びます。</div>';
+
+  if (!rows.length) {
+    $("list").innerHTML = note + '<div class="empty">営業と判定したものはありません</div>';
+    return;
+  }
+
+  $("list").innerHTML = note + rows.map(eigyouCard).join("");
+
+  Array.prototype.forEach.call($("list").querySelectorAll(".unbtn"), function (b) {
+    b.addEventListener("click", async function () {
+      const card = b.closest(".card");
+      const n = Number(card.dataset.row);
+      if (!confirm("この案件を承認待ちに戻します。\n返信案が作られ、通常の流れに乗ります。\n\nよろしいですか？")) return;
+      b.disabled = true; b.textContent = "戻しています…";
+      try {
+        const r = await api({ mode: "unEigyou", row: n });
+        if (r && r.ok) {
+          card.style.opacity = ".4";
+          b.textContent = "戻しました";
+          const now = Number($("nEigyou").textContent);
+          if (!isNaN(now) && now > 0) $("nEigyou").textContent = now - 1;
+          toast("承認待ちに戻しました。返信案ができるまで数分かかります。");
+        } else {
+          b.disabled = false; b.textContent = "営業ではない（承認待ちに戻す）";
+          toast((r && r.error) || "戻せませんでした", true);
+        }
+      } catch (e) {
+        b.disabled = false; b.textContent = "営業ではない（承認待ちに戻す）";
+        toast(e.message, true);
+      }
+    });
+  });
+}
+
+/* ============================================================
+ *  用件でしぼる
+ *
+ *  20分類を全部並べても選べません。いま実際に来ている用件だけを、
+ *  件数の多い順に出します。0件の用件は出しません。
+ * ============================================================ */
+let topicFilter = "";
+
+function drawFilters(rows) {
+  const box = $("filters");
+  const n = {};
+  rows.forEach(function (x) {
+    const t = topicOf(x.content);
+    if (!t) return;
+    n[t] = (n[t] || 0) + 1;
+  });
+
+  const keys = Object.keys(n).sort(function (a, b) {
+    if (n[b] !== n[a]) return n[b] - n[a];
+    return a.localeCompare(b, "ja");
+  });
+
+  if (!keys.length) { box.innerHTML = ""; topicFilter = ""; return; }
+  if (topicFilter && keys.indexOf(topicFilter) < 0) topicFilter = "";
+
+  box.innerHTML = '<button class="fchip' + (topicFilter ? "" : " on")
+      + '" type="button" data-t="">すべて<span class="fn">' + rows.length + '</span></button>'
+    + keys.map(function (k) {
+        return '<button class="fchip' + (topicFilter === k ? " on" : "")
+             + '" type="button" data-t="' + esc(k) + '">' + esc(k)
+             + '<span class="fn">' + n[k] + '</span></button>';
+      }).join("");
+
+  Array.prototype.forEach.call(box.querySelectorAll(".fchip"), function (b) {
+    b.addEventListener("click", function () {
+      topicFilter = b.dataset.t || "";
+      drawList();
+    });
+  });
+}
+
+function drawList() {
+  if (listTab === "eigyou") { $("filters").innerHTML = ""; drawEigyou(); return; }
+
+  const wait = (listTab === "wait");
+  const done = (listTab === "done");
+  const all  = wait ? listWait : (done ? listDone : listOpen);
+
+  $("tabOpen").className   = "tab" + (!wait && !done ? " on" : "");
+  $("tabWait").className   = "tab" + (wait ? " on" : "");
+  $("tabDone").className   = "tab" + (done ? " on" : "");
+  $("tabEigyou").className = "tab";
+
+  drawFilters(all);
+
+  const rows = topicFilter
+    ? all.filter(function (x) { return topicOf(x.content) === topicFilter; })
+    : all;
+
+  if (!rows.length) {
+    $("list").innerHTML = '<div class="empty">'
+      + (topicFilter
+          ? "「" + esc(topicFilter) + "」の案件はありません"
+          : (wait ? "返事を待っている案件はありません"
+                  : (done ? "完了した案件はまだありません" : "未返信の案件はありません")))
+      + '</div>';
+    return;
+  }
+
+  $("list").innerHTML = rows.map(function (x) { return cardHtml(x, done, wait); }).join("");
+  if (cur) {
+    const on = $("list").querySelector('.card[data-row="' + cur.rowNo + '"]');
+    if (on) on.classList.add("on");
+  }
+
+  Array.prototype.forEach.call($("list").querySelectorAll(".card"), function (el) {
+    const n = Number(el.dataset.row);
+    el.addEventListener("click", function () { openDetail(n); });
+    el.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDetail(n); }
+    });
+  });
+}
+
+async function loadList() {
+  $("list").innerHTML = '<div class="empty">読み込んでいます…</div>';
+  try {
+    const r = await api({ mode: "list" });
+    if (!r.ok) throw new Error(r.error || "読み込めませんでした");
+
+    listOpen = r.open || [];
+    listWait = r.waiting || [];
+    listDone = r.done || [];
+    isTest   = !!r.test;
+
+    $("mode").textContent = isTest ? "テスト送信中" : "本番送信";
+    $("mode").className   = isTest ? "badge" : "badge live";
+    $("buildtag").textContent = "画面 " + UI_BUILD
+      + " ／ API "  + (r.build || "?")
+      + " ／ 一覧 " + (r.listBuild || "?");
+
+    $("nOpen").textContent = listOpen.length;
+    $("nWait").textContent = listWait.length;
+    $("nDone").textContent = listDone.length;
+    $("nEigyou").textContent = (r.nEigyou != null) ? r.nEigyou : "";
+
+    /* ヘッダーの数字。件数はここで見せるので、下の文章は0件のときだけにします */
+    const late = listOpen.filter(function (x) { return x.days >= 4; }).length;
+    $("sOpen").textContent = listOpen.length;
+    $("sLate").textContent = late;
+    $("sDone").textContent = listDone.length;
+    $("sLate").className = late ? "v late" : "v muted";
+
+    $("count").textContent = listOpen.length
+      ? ""
+      : "返信を待っている案件はありません";
+
+    drawList();
+
+  } catch (e) {
+    $("list").innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+  }
+}
+
+/* ---------- 詳細 ---------- */
+let openSeq = 0;          // 連打したとき、古い応答で画面が戻らないようにする
+
+async function openDetail(rowNo) {
+  const seq = ++openSeq;
+
+  /* ① まず、一覧が持っている情報だけで先に描く。通信を待たない。
+   *   ★返事待ちタブの行も探します。入れ忘れると、そのタブから開いたとき
+   *     見出しが「読み込んでいます…」のままになります。 */
+  const hint = (listOpen.concat(listWait, listDone))
+    .filter(function (x) { return x.rowNo === rowNo; })[0];
+
+  Array.prototype.forEach.call($("list").querySelectorAll(".card"), function (el) {
+    el.classList.toggle("on", Number(el.dataset.row) === rowNo);
+  });
+
+  cur = { rowNo: rowNo };
+  /* ★送信前に人の作業が要る案件は、見出しにも出します。
+   *   一覧のチップだけだと、詳細を開いた時点で見えなくなるためです。
+   *   送信ボタンを押す直前に目に入る位置に置いています。 */
+  const markHtml = (hint && hint.tmplMark)
+    ? '　<span class="topic ' + (hint.tmplMark === "要添付" ? "attach" : "edit") + '">'
+      + esc(hint.tmplMark) + '</span>'
+    : "";
+  $("dMeta").innerHTML = hint
+    ? "<b>" + esc(hint.building || "物件名なし") + "</b>　" + esc(hint.kind)
+      + '　<span class="nw">' + esc(hint.received) + "</span>" + markHtml
+    : "読み込んでいます…";
+  $("dSubject").innerHTML   = "";
+  $("dContent").textContent = "";
+  $("dRaw").textContent     = "読み込んでいます…";
+  $("dDraft").value         = hint ? (hint.draft || "") : "";
+  $("dPreview").textContent = "";
+  $("dPrevBox").open        = false;
+  $("dOrder").value         = "";
+  $("dOrderNote").textContent = "";
+  $("dThread").className    = "thread empty-wrap";
+  $("dThread").innerHTML    = '<div class="th-empty">読み込んでいます…</div>';
+  $("dThreadNote").textContent = "";
+  $("dFiles").innerHTML     = "";
+  attFiles = [];
+
+  setStatus(null);
+  disarm();
+  if (!isWide()) $("listView").classList.add("hide");
+  $("detailView").classList.remove("hide");
+  document.body.style.overflow = "hidden";
+  $("detailView").scrollTop = 0;
+
+  /* ② 問い合わせは1回だけ。
+   *    以前は detail・thread・attachList を別々に投げていましたが、
+   *    GASはリクエストごとにプロジェクトを読み込み直すため、
+   *    その起動コストを3回払うことになり、表示が重くなっていました。
+   *    いまは detail の返り値に履歴と添付が入っています。 */
+  try {
+    const d = await api({ mode: "detail", row: rowNo });
+    if (seq !== openSeq) return;                 // 別の案件が開かれていたら捨てる
+    if (!d.ok) { toast(d.error, true); return; }
+
+    cur = d;
+    $("dMeta").innerHTML    = "<b>" + esc(d.building || "物件名なし") + "</b>　"
+                            + esc(d.kind)
+                            + '　<span class="nw">' + esc(d.received) + "</span>";
+    $("dSubject").innerHTML = "件名：" + esc(d.subject);
+    $("dContent").textContent = d.content;
+    $("dRaw").textContent     = d.raw || "（原文がありません。crmFillRaw を実行してください）";
+    if (!$("dDraft").value) $("dDraft").value = d.draft;   // 入力中なら上書きしない
+    $("dPreview").textContent = d.preview;
+
+    drawThread(d.thread || null);
+
+    if (d.attach && d.attach.ok) attFiles = d.attach.files || [];
+    else                          attFiles = [];
+    drawAttach();
+  } catch (e) {
+    if (seq === openSeq) {
+      toast(e.message, true);
+      $("dThread").innerHTML = '<div class="th-empty">履歴を読み込めませんでした</div>';
+      drawAttach();
+    }
+  }
+}
+
+/* ★以前は1000px以上で左右に並べていました。いまは1件をまん中に開くので、
+ *   一覧は隠さず、背景に置いたままにします（640px以下だけ切り替えます）。 */
+function isWide() { return window.matchMedia("(min-width: 641px)").matches; }
+
+/* 処理が終わった案件を、通信せずに画面から片づける */
+function finishRow(rowNo, toDone, toWait) {
+  const i = listOpen.map(function (x) { return x.rowNo; }).indexOf(rowNo);
+  if (i >= 0) {
+    const x = listOpen.splice(i, 1)[0];
+    if (toDone) {
+      x.status = toDone;
+      /* ★返事待ちで送ったときは、完了ではなく返事待ちタブへ移します。
+       *   期限は crmApi.gs が送信日＋WAIT_DAYS で入れています。
+       *   ここでは画面をすぐ動かすための仮の値を置くだけで、
+       *   次に一覧を読み直せば台帳の値に入れ替わります。 */
+      if (toWait) {
+        x.waitLeft = (typeof WAIT_DAYS_UI === "number") ? WAIT_DAYS_UI : 7;
+        listWait.push(x);
+        listWait.sort(function (a, b) { return a.waitLeft - b.waitLeft; });
+      } else {
+        listDone.unshift(x);
+      }
+    }
+  }
+  $("nOpen").textContent = listOpen.length;
+  $("nWait").textContent = listWait.length;
+  $("nDone").textContent = listDone.length;
+  const late = listOpen.filter(function (x) { return x.days >= 4; }).length;
+  $("count").textContent = listOpen.length
+    ? "返信を待っている案件が " + listOpen.length + " 件"
+      + (late ? "（うち4日以上たっているものが " + late + " 件）" : "")
+    : "返信を待っている案件はありません";
+  drawList();
+}
+
+function backToList() {
+  $("detailView").classList.add("hide");
+  document.body.style.overflow = "";
+  $("listView").classList.remove("hide");
+  cur = null;
+  if (!isWide()) loadList();
+}
+
+/* ============================================================
+ *  送信される形を作り直す
+ *
+ *  プレビューは「保存済みの本文」から作られます。
+ *  画面で書き換えた直後は古いままなので、開いたときに作り直します。
+ * ============================================================ */
+let prevSeq = 0;
+
+async function refreshPreview() {
+  if (!cur) return;
+  const text = $("dDraft").value.trim();
+  if (!text) { $("dPreview").textContent = "（本文が空です）"; return; }
+
+  const seq = ++prevSeq;
+  const rowNo = cur.rowNo;
+  $("dPreview").textContent = "作っています…";
+
+  try {
+    const r = await api({ mode: "preview", row: rowNo, text: text });
+    if (seq !== prevSeq) return;
+    $("dPreview").textContent = (r && r.ok) ? r.preview
+      : "作れませんでした：" + ((r && r.error) || "");
+  } catch (e) {
+    if (seq === prevSeq) $("dPreview").textContent = "作れませんでした：" + e.message;
+  }
+}
+
+/* ============================================================
+ *  AIに書いてもらう
+ *
+ *  台帳には書きません。返ってきた文面を返信本文の欄に入れるだけです。
+ *  内容を見てから「下書きを保存」を押してください。
+ * ============================================================ */
+async function askAi() {
+  if (!cur) return;
+
+  const order = $("dOrder").value.trim();
+  if (!order) {
+    $("dOrderNote").textContent = "どう返すかを書いてから押してください";
+    $("dOrder").focus();
+    return;
+  }
+
+  const cur0 = $("dDraft").value.trim();
+  if (cur0 && !confirm("いま書かれている返信の本文を、AIの文面で置き換えます。よろしいですか。")) return;
+
+  const b = $("bAi");
+  b.disabled = true;
+  b.textContent = "書いています…";
+  $("dOrderNote").textContent = "";
+  setStatus("work", "AIが文面を作っています。10秒ほどかかります。");
+
+  const seq = openSeq;
+  try {
+    const r = await api({ mode: "rewrite", row: cur.rowNo, order: order });
+    if (seq !== openSeq) return;                 // 別の案件が開かれていたら捨てる
+
+    if (!r.ok) {
+      setStatus("bad", "書けませんでした\n理由：" + (r.error || "（理由が返っていません）"));
+      return;
+    }
+    $("dDraft").value = r.text;
+    setStatus("ok", "文面ができました。内容を確かめて、直すところがあれば直してください。"
+                  + "\nまだ保存していません。");
+    $("dOrderNote").textContent = "保存するまで台帳は変わりません";
+    disarm();
+    if ($("dPrevBox").open) refreshPreview();
+  } catch (e) {
+    if (seq === openSeq) setStatus("bad", "書けませんでした\n理由：" + e.message);
+  } finally {
+    b.disabled = false;
+    b.textContent = "この指示で書いてもらう";
+  }
+}
+
+/* ---------- 保存 ---------- */
+async function save(silent) {
+  if (!cur) return false;
+  const text = $("dDraft").value.trim();
+  if (!text) { setStatus("bad", "本文が空です。保存しませんでした。"); return false; }
+
+  const b = $("bSave");
+  const label = b.textContent;
+  b.disabled = true;
+  b.textContent = "保存しています…";
+  setStatus("work", silent ? "送信の前に下書きを保存しています…" : "下書きを保存しています…");
+
+  try {
+    const r = await api({ mode: "save", row: cur.rowNo, text: text });
+    if (!r.ok) {
+      setStatus("bad", "保存できませんでした\n理由：" + (r.error || "（理由が返っていません）"));
+      return false;
+    }
+    cur.draft = text;
+    setStatus("ok", silent
+      ? "下書きを保存しました。つづけて送信できます。"
+      : "下書きを保存しました（" + cur.rowNo + "行目）");
+    return true;
+  } catch (e) {
+    setStatus("bad", "保存できませんでした\n理由：" + e.message);
+    return false;
+  } finally {
+    b.disabled = false;
+    b.textContent = label;
+  }
+}
+
+/* ---------- 完了にする（返信せずに片づける） ----------
+ *  ★台帳のステータスは「対応不要」のまま変えていません。
+ *    画面の言い方だけを「完了にする」に直しています。
+ *    送信した案件も、この案件も、一覧では同じ「完了」に入ります。 */
+async function skip() {
+  if (!cur) return;
+  if (!confirm("返信せずに完了にします。よろしいですか？")) return;
+
+  const b = $("bSkip");
+  b.disabled = true;
+  b.textContent = "記録しています…";
+  setStatus("work", "完了として記録しています…");
+
+  try {
+    const r = await api({ mode: "skip", row: cur.rowNo });
+    if (!r.ok) {
+      setStatus("bad", "記録できませんでした\n理由：" + (r.error || "（理由が返っていません）"));
+      b.disabled = false; b.textContent = "完了にする";
+      return;
+    }
+    setStatus("ok", "完了として記録しました。");
+    finishRow(cur.rowNo, "対応不要");
+    setTimeout(backToList, 1000);
+  } catch (e) {
+    setStatus("bad", "記録できませんでした\n理由：" + e.message);
+    b.disabled = false; b.textContent = "完了にする";
+  }
+}
+
+/* ---------- 送信 ----------
+ *  以前は「2回押す」方式でしたが、通信に1〜2秒かかるため
+ *  1回目の保存中にもう一度押すと、送信段階に進めませんでした。
+ *  確認ダイアログ方式に変更し、押した瞬間にボタンを止めます。
+ */
+/* 画面表示用の日数。crmApi.gs の WAIT_DAYS と合わせてください。
+ * ★ここがずれても台帳は正しいままです。次に一覧を読み直せば直ります。 */
+const WAIT_DAYS_UI = 7;
+
+function disarm() {                     // 残っている呼び出し先（何もしません）
+  sendButtons().forEach(function (b) {
+    b.disabled = false;
+    b.classList.remove("armed");
+  });
+  restoreSendLabels();
+}
+
+function sendButtons() {
+  return [$("bSend"), $("bSendWait")].filter(Boolean);
+}
+function restoreSendLabels() {
+  if ($("bSend"))     $("bSend").textContent     = "送信して完了";
+  if ($("bSendWait")) $("bSendWait").textContent = "送信して返事待ち";
+}
+
+/* ★wait が true なら、送信後に返事待ちタブへ入ります（R列に期限が入ります）。
+ *   false なら完了タブへ。どちらもメールの中身は同じです。
+ *
+ *   ★お客様から返信が来たときは、crmReply.gs が新しい行として台帳に足します。
+ *     その行は未返信タブに並ぶので、返事待ちで送っていなくても必ず目に入ります。 */
+async function send(wait) {
+  if (!cur) return;
+  const b   = wait ? $("bSendWait") : $("bSend");
+  const all = sendButtons();
+  if (!b || b.disabled) return;         // 連打を無視します
+
+  all.forEach(function (x) { x.disabled = true; });
+  b.textContent = "準備しています…";
+
+  try {
+    const ok = await save(true);        // 送信前に必ず保存
+    if (!ok) return;
+
+    const att = attFiles.length
+      ? "\n添付：" + attFiles.map(function (f) { return f.name; }).join("、") + "\n"
+      : "\n添付：なし\n";
+
+    const after = wait
+      ? "送信後：返事待ち（" + WAIT_DAYS_UI + "日）\n"
+      : "送信後：完了\n";
+
+    const q = isTest
+      ? "テスト送信します。\n\n宛先はテスト用アドレスです。\nお客様には届きません。\n" + att + after + "\nよろしいですか？"
+      : "★本番送信します。\n\n" + cur.from + " に実際に届きます。\n" + att + after + "\nよろしいですか？";
+
+    if (!confirm(q)) {
+      setStatus("work", "送信を取りやめました。まだ送っていません。");
+      return;
+    }
+
+    b.textContent = "送信しています…";
+    b.classList.add("armed");
+    setStatus("work", "送信しています…（1〜2秒かかります）");
+
+    const r = await api({ mode: "send", row: cur.rowNo, wait: wait ? "1" : "" });
+
+    if (!r || !r.ok) {
+      setStatus("bad", "送信できませんでした\n理由：" +
+        ((r && r.error) ? r.error : JSON.stringify(r)));
+      return;
+    }
+
+    setStatus("ok", r.test
+      ? "テスト送信しました。\n宛先：" + r.to +
+        "\n（お客様には届いていません。台帳も更新していません）"
+      : "送信しました。\n宛先：" + r.to +
+        (wait
+          ? "\n返事待ちに入れました（あと" + WAIT_DAYS_UI + "日）。"
+          : "\n台帳を「送信済」に更新しました。"));
+    if (!r.test) finishRow(cur.rowNo, "送信済", wait);
+    setTimeout(backToList, 2000);
+
+  } catch (e) {
+    setStatus("bad", "送信できませんでした\n理由：" + e.message);
+  } finally {
+    all.forEach(function (x) { x.disabled = false; x.classList.remove("armed"); });
+    restoreSendLabels();
+  }
+}
+
+/* ============================================================
+ *  やりとりの履歴
+ *
+ *  同じメールアドレスの案件を、古い順に並べます。
+ *  お客様からの分は左、こちらが送った分は右に出します。
+ * ============================================================ */
+function threadBubble(x) {
+  const who = x.side === "in" ? "お客様"
+            : (x.side === "out" ? "弊社" : "弊社（この案件の返信案）");
+  const long = x.text.length > 220;
+  const head = long ? x.text.slice(0, 220) + "…" : x.text;
+  return '<div class="th-row ' + x.side + (x.cur ? " cur" : "") + '">'
+       +   '<div class="th-who">' + esc(who) + (x.at ? "　" + esc(x.at) : "") + '</div>'
+       +   '<div class="th-bub" data-full="' + esc(x.text) + '">' + esc(head) + '</div>'
+       +   (long ? '<button class="th-more" type="button">全文を見る</button>' : "")
+       + '</div>';
+}
+
+function drawThread(r) {
+  const box  = $("dThread");
+  const note = $("dThreadNote");
+  const items = (r && r.items) || [];
+
+  if (!r || !r.ok) {
+    box.className = "thread empty-wrap";
+    box.innerHTML = '<div class="th-empty">履歴を読み込めませんでした</div>';
+    return;
+  }
+  if (items.length <= 1) {
+    box.className = "thread empty-wrap";
+    box.innerHTML = '<div class="th-empty">この方とのやりとりは、今回がはじめてです</div>';
+    note.textContent = "";
+    return;
+  }
+
+  box.className = "thread";
+  note.textContent = (r.mail || "") + "　" + items.length + "件";
+  box.innerHTML = items.map(threadBubble).join("");
+
+  Array.prototype.forEach.call(box.querySelectorAll(".th-more"), function (b) {
+    b.addEventListener("click", function () {
+      const bub = b.previousElementSibling;
+      bub.textContent = bub.dataset.full;
+      b.remove();
+    });
+  });
+
+  box.scrollTop = box.scrollHeight;
+}
+
+async function loadThread() {
+  if (!cur) return;
+  try { drawThread(await api({ mode: "thread", row: cur.rowNo })); }
+  catch (e) { drawThread(null); }
+}
+
+/* ============================================================
+ *  添付ファイル
+ *
+ *  ファイルの中身はJSONPでは送れない（URLに載りきらない）ため、
+ *  ここだけ POST で送ります。読み書きの他の処理はJSONPのままです。
+ * ============================================================ */
+function apiPost(params) {
+  return fetch(API, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(params),
+    redirect: "follow",
+  }).then(function (r) { return r.text(); })
+    .then(function (t) {
+      try { return JSON.parse(t); }
+      catch (e) { throw new Error("応答が読み取れませんでした"); }
+    });
+}
+
+let attFiles = [];
+
+function drawAttach() {
+  const box = $("dFiles");
+  if (!attFiles.length) {
+    box.innerHTML = '<div class="att-empty">添付なしで送信します</div>';
+    return;
+  }
+  box.innerHTML = attFiles.map(function (f) {
+    const kb = Math.max(1, Math.round(f.size / 1024));
+    return '<div class="att-row" data-id="' + esc(f.id) + '">'
+         +   '<span class="nm">' + esc(f.name) + '</span>'
+         +   '<span class="sz">' + kb + ' KB</span>'
+         +   '<button class="rm" type="button">はずす</button>'
+         + '</div>';
+  }).join("");
+
+  Array.prototype.forEach.call(box.querySelectorAll(".rm"), function (b) {
+    b.addEventListener("click", function () {
+      const id = b.parentNode.dataset.id;
+      dropAttach(id);
+    });
+  });
+}
+
+async function loadAttach() {
+  attFiles = [];
+  drawAttach();
+  if (!cur) return;
+  try {
+    const r = await api({ mode: "attachList", row: cur.rowNo });
+    if (r && r.ok) { attFiles = r.files || []; drawAttach(); }
+  } catch (e) { /* 一覧が取れなくても、送信そのものは止めない */ }
+}
+
+async function pickAttach(file) {
+  if (!cur || !file) return;
+  if (attFiles.length >= 2) { setStatus("bad", "添付は2件までです"); return; }
+  if (file.size > 5000000) { setStatus("bad", "ファイルが大きすぎます（約5MBまで）"); return; }
+
+  const lab = document.querySelector(".att-pick");
+  lab.classList.add("busy");
+  setStatus("work", "ファイルを読み込んでいます…");
+
+  try {
+    const dataUrl = await new Promise(function (resolve, reject) {
+      const rd = new FileReader();
+      rd.onload  = function () { resolve(rd.result); };
+      rd.onerror = function () { reject(new Error("ファイルを読めませんでした")); };
+      rd.readAsDataURL(file);
+    });
+
+    setStatus("work", "添付を預けています…");
+    const r = await apiPost({ mode: "attach", row: cur.rowNo, name: file.name, data: dataUrl });
+
+    if (!r || !r.ok) {
+      setStatus("bad", "添付できませんでした\n理由：" + ((r && r.error) || "（理由が返っていません）"));
+      return;
+    }
+    attFiles = r.files || [];
+    drawAttach();
+    setStatus("ok", "添付しました：" + file.name);
+
+  } catch (e) {
+    setStatus("bad", "添付できませんでした\n理由：" + e.message);
+  } finally {
+    lab.classList.remove("busy");
+    $("dFile").value = "";
+  }
+}
+
+async function dropAttach(id) {
+  if (!cur) return;
+  try {
+    const r = await api({ mode: "attachDrop", row: cur.rowNo, id: id });
+    if (r && r.ok) { attFiles = r.files || []; drawAttach(); setStatus("ok", "添付をはずしました"); }
+    else setStatus("bad", "はずせませんでした");
+  } catch (e) { setStatus("bad", "はずせませんでした\n理由：" + e.message); }
+}
+
+/* ---------- 起動 ---------- */
+$("tabOpen").addEventListener("click", function () { listTab = "open"; topicFilter = ""; drawList(); });
+$("tabWait").addEventListener("click", function () { listTab = "wait"; topicFilter = ""; drawList(); });
+$("tabDone").addEventListener("click", function () { listTab = "done"; topicFilter = ""; drawList(); });
+$("tabEigyou").addEventListener("click", function () { listTab = "eigyou"; topicFilter = ""; drawList(); });
+$("dFile").addEventListener("change", function (e) {
+  const f = e.target.files && e.target.files[0];
+  if (f) pickAttach(f);
+});
+$("back").addEventListener("click", backToList);
+
+/* 背景をクリック、または Esc で閉じます。
+ * ★集中編集が開いているときは、そちらが先に閉じます（二重で閉じません）。 */
+$("detailView").addEventListener("mousedown", function (e) {
+  if (e.target === $("detailView")) backToList();
+});
+document.addEventListener("keydown", function (e) {
+  if (e.key !== "Escape") return;
+  if ($("veil").getAttribute("data-open") === "true") return;
+  if (!$("detailView").classList.contains("hide")) backToList();
+});
+$("bSave").addEventListener("click", function () { save(false); });
+$("bAi").addEventListener("click", askAi);
+$("dPrevBox").addEventListener("toggle", function () {
+  if ($("dPrevBox").open) refreshPreview();
+});
+$("bSkip").addEventListener("click", skip);
+$("bSend").addEventListener("click", function () { send(false); });
+$("bSendWait").addEventListener("click", function () { send(true); });
+
+
+/* ============================================================
+ *  起動
+ *
+ *  ★URLに ?row=27 が付いていたら、その案件を直接開きます。
+ *    LINEの通知から開いたとき、一覧に着地するとどれのことか分かりません。
+ *    通知には案件ごとのURLが入っているので、そのまま開けるようにします。
+ * ============================================================ */
+function bootRow_() {
+  try {
+    const m = String(location.search || "").match(/[?&]row=(\d+)/);
+    return m ? Number(m[1]) : 0;
+  } catch (e) { return 0; }
+}
+
+
+/* ============================================================
+ *  集中編集
+ *
+ *  返信本文をクリックすると、背景をぼかした編集画面が開きます。
+ *  上部に問い合わせの原文を出すので、見ながら書けます。
+ *
+ *  ★ #dDraft の値と行き来するだけです。保存・送信・AI指示は
+ *    これまでどおり #dDraft を読むので、動きは変わりません。
+ * ============================================================ */
+(function zenEdit() {
+  const main = $("dDraft");
+  const veil = $("veil");
+  const zen  = $("zenText");
+  if (!main || !veil || !zen) return;
+  let before = "";
+
+  function tally() { $("zenCount").textContent = zen.value.length.toLocaleString() + " 文字"; }
+
+  function open() {
+    if (veil.getAttribute("data-open") === "true") return;
+    before = main.value;
+    zen.value = main.value;
+    /* 詳細の dMeta は「<b>物件名</b>　分類　受信日時」の形です。
+       太字の部分を見出しに、残りを小さく添えます。 */
+    const bold = $("dMeta").querySelector("b");
+    $("zenTitle").textContent = bold ? bold.textContent : "案件";
+    $("zenMeta").textContent  = $("dMeta").textContent.replace(bold ? bold.textContent : "", "").trim();
+    $("zenAsk").textContent   = ($("dContent") ? $("dContent").textContent : "");
+    veil.setAttribute("data-open", "true");
+    document.body.style.overflow = "hidden";
+    tally();
+    fit();
+    zen.focus();
+    setTimeout(fit, 300);      // キーボードが出きってから、もう一度合わせます
+    try { zen.setSelectionRange(zen.value.length, zen.value.length); } catch (e) {}
+  }
+
+  /* keep=true … 書いた内容を残す／false … 開く前に戻す */
+  function close(keep) {
+    main.value = keep ? zen.value : before;
+    veil.removeAttribute("data-open");
+    veil.style.height = "";
+    veil.style.top = "";
+    box.classList.remove("kb", "ask-open");
+    document.body.style.overflow = "";
+    main.blur();
+  }
+
+  /* ★スマホでキーボードが出ると、画面の見えている高さが縮みます。
+   *   iOSは position:fixed の高さが変わらないため、入力欄が数行に潰れ、
+   *   ボタンがキーボードの下に隠れていました。
+   *   visualViewport を見て、見えている範囲にぴったり合わせます。 */
+  const box = veil.querySelector(".zen");
+  function fit() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    veil.style.height = vv.height + "px";
+    veil.style.top    = vv.offsetTop + "px";
+    const shrunk = (window.innerHeight - vv.height) > 120;   // キーボードが出ている
+    box.classList.toggle("kb", shrunk);
+    if (!shrunk) box.classList.remove("ask-open");
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", function () {
+      if (veil.getAttribute("data-open") === "true") fit();
+    });
+    window.visualViewport.addEventListener("scroll", function () {
+      if (veil.getAttribute("data-open") === "true") fit();
+    });
+  }
+
+  $("zenPeek").addEventListener("click", function () {
+    box.classList.toggle("ask-open");
+  });
+
+  main.addEventListener("focus", open);
+  main.addEventListener("click", open);
+  zen.addEventListener("input", tally);
+  $("zenOk").addEventListener("click", function () { close(true); });
+  $("zenClose").addEventListener("click", function () { close(true); });
+  $("zenBack").addEventListener("click", function () { close(false); });
+  veil.addEventListener("mousedown", function (e) { if (e.target === veil) close(true); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && veil.getAttribute("data-open") === "true") close(true);
+  });
+})();
+
+(function boot() {
+  const row = bootRow_();
+  loadList();                       // 一覧は裏で読み込んでおく（戻ったときのため）
+  if (row >= 2) openDetail(row);    // 指定があれば、その案件をすぐ開く
+})();
+</script>
+</body>
+</html>
